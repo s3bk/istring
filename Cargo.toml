@@ -1,0 +1,10 @@
+[package]
+name = "istring"
+version = "0.1.0"
+authors = ["Sebastian Köln <sebk@rynx.org>"]
+description = "inlinable String"
+tags = "experimental"
+license = "MIT"
+repo = "https://github.com/s3bk/istring.git"
+
+[dependencies]
