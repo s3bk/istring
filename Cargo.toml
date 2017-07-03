@@ -1,10 +1,9 @@
 [package]
 name = "istring"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Sebastian Köln <sebk@rynx.org>"]
-description = "inlinable String"
+description = "inlinable String: like std::String, except small strings do not require a separate allocation."
 tags = "experimental"
 license = "MIT"
 repo = "https://github.com/s3bk/istring.git"
-
-[dependencies]
+keywords = ["string", "inline", "no_std"]

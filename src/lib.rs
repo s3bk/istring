@@ -1,4 +1,23 @@
-#![feature(untagged_unions, alloc, heap_api, str_mut_extras)]
+// Copyright 2017 Sebastian Köln
+
+// Licensed under the MIT license
+// <LICENSE or http://opensource.org/licenses/MIT>
+
+// The trait impls contains large chunks from alloc/string.rs,
+// with the following copyright notice:
+
+// Copyright 2014 The Rust Project Developers. See the COPYRIGHT
+// file at the top-level directory of this distribution and at
+// http://rust-lang.org/COPYRIGHT.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+#![feature(untagged_unions, alloc, heap_api, str_mut_extras, inclusive_range)]
+#![no_std]
 
 /*!
 I String type hat has the same size as `String`,
@@ -9,9 +28,16 @@ on 64bit machines: size_of::<IString>() == 24 bytes, inline capacity: 23 bytes
 */
 
 extern crate alloc;
-use std::{ops, fmt, slice, str, convert, mem};
-use std::ptr::copy_nonoverlapping;
-use std::string::FromUtf8Error;
+
+use core::{fmt, slice, str, convert, mem};
+use core::ptr::copy_nonoverlapping;
+use core::clone::Clone;
+use core::iter::Extend;
+use core::ops::{self, Index, Add, AddAssign};
+use core::hash;
+use alloc::{String, Vec};
+use alloc::borrow::Cow;
+use alloc::string::FromUtf8Error;
 
 const IS_INLINE: u8 = 1 << 7;
 const LEN_MASK: u8 = !IS_INLINE;
@@ -29,6 +55,7 @@ const MAX_CAPACITY: usize = (1 << 31) - 1;
 // use the MSG of heap.len to encode the variant
 // which is also MSB of inline.len
 #[cfg(target_endian = "little")]
+#[derive(Copy, Clone)]
 #[repr(C)]
 struct Inline {
     data:   [u8; INLINE_CAPACITY],
@@ -44,6 +71,7 @@ struct Heap {
 }
 
 #[cfg(target_endian = "big")]
+#[derive(Copy, Clone)]
 #[repr(C)]
 struct Inline {
     len:    u8,
@@ -51,6 +79,7 @@ struct Inline {
 }
 
 #[cfg(target_endian = "big")]
+#[derive(Copy, Clone)]
 #[repr(C)]
 struct Heap {
     len:    usize,
@@ -78,12 +107,17 @@ impl IString {
     }
     pub fn with_capacity(capacity: usize) -> IString {
         assert!(capacity < MAX_CAPACITY);
-        let mut s = IString::new();
         
         if capacity > INLINE_CAPACITY {
-            s.move_to_heap(capacity)
+            unsafe {
+                let ptr = alloc::heap::allocate(capacity, 1);
+                IString { heap: Heap { ptr: ptr, len: 0, cap: capacity } }
+            }
+        } else {
+            IString {
+                inline: Inline { data: [0; INLINE_CAPACITY], len: IS_INLINE }
+            }
         }
-        s
     }
     
     #[inline(always)]
@@ -204,7 +238,6 @@ impl IString {
             self.set_len(new_len);
             self.as_bytes_mut()[old_len..new_len].copy_from_slice(s.as_bytes());
         }
-        println!("len = {:?}", self.len());
     }
     
     #[inline(always)]
@@ -342,12 +375,168 @@ impl convert::Into<String> for IString {
     }
 }
 
+impl Clone for IString {
+    fn clone(&self) -> IString {
+        if self.is_inline() {
+            // simple case
+            IString { inline: unsafe { self.inline } }
+        } else {
+            let mut s = IString::with_capacity(self.len());
+            s.push_str(self);
+            s
+        }
+    }
+}
+
+impl PartialEq<str> for IString {
+    fn eq(&self, rhs: &str) -> bool {
+        self.as_str() == rhs
+    }
+}
+impl<'a> PartialEq<&'a str> for IString {
+    fn eq(&self, rhs: &&'a str) -> bool {
+        self.as_str() == *rhs
+    }
+}
+impl PartialEq<String> for IString {
+    fn eq(&self, rhs: &String) -> bool {
+        self.as_str() == rhs
+    }
+}
+impl PartialEq for IString {
+    fn eq(&self, rhs: &IString) -> bool {
+        self.as_str() == rhs.as_str()
+    }
+}
+impl fmt::Write for IString {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.push_str(s);
+        Ok(())
+    }
+}
+
+impl Extend<char> for IString {
+    fn extend<I: IntoIterator<Item = char>>(&mut self, iter: I) {
+        let iterator = iter.into_iter();
+        let (lower_bound, _) = iterator.size_hint();
+        self.reserve(lower_bound);
+        for ch in iterator {
+            self.push(ch)
+        }
+    }
+}
+impl<'a> Extend<&'a char> for IString {
+    fn extend<I: IntoIterator<Item = &'a char>>(&mut self, iter: I) {
+        self.extend(iter.into_iter().cloned());
+    }
+}
+impl<'a> Extend<&'a str> for IString {
+    fn extend<I: IntoIterator<Item = &'a str>>(&mut self, iter: I) {
+        for s in iter {
+            self.push_str(s)
+        }
+    }
+}
+impl<'a> Extend<Cow<'a, str>> for IString {
+    fn extend<I: IntoIterator<Item = Cow<'a, str>>>(&mut self, iter: I) {
+        for s in iter {
+            self.push_str(&s)
+        }
+    }
+}
+
+impl Default for IString {
+    #[inline]
+    fn default() -> IString {
+        IString::new()
+    }
+}
+
+impl hash::Hash for IString {
+    #[inline]
+    fn hash<H: hash::Hasher>(&self, hasher: &mut H) {
+        (**self).hash(hasher)
+    }
+}
+
+impl<'a> Add<&'a str> for IString {
+    type Output = IString;
+
+    #[inline]
+    fn add(mut self, other: &str) -> IString {
+        self.push_str(other);
+        self
+    }
+}
+impl<'a> AddAssign<&'a str> for IString {
+    #[inline]
+    fn add_assign(&mut self, other: &str) {
+        self.push_str(other);
+    }
+}
+
+impl ops::Index<ops::Range<usize>> for IString {
+    type Output = str;
+
+    #[inline]
+    fn index(&self, index: ops::Range<usize>) -> &str {
+        &self[..][index]
+    }
+}
+impl ops::Index<ops::RangeTo<usize>> for IString {
+    type Output = str;
+
+    #[inline]
+    fn index(&self, index: ops::RangeTo<usize>) -> &str {
+        &self[..][index]
+    }
+}
+impl ops::Index<ops::RangeFrom<usize>> for IString {
+    type Output = str;
+
+    #[inline]
+    fn index(&self, index: ops::RangeFrom<usize>) -> &str {
+        &self[..][index]
+    }
+}
+impl ops::Index<ops::RangeFull> for IString {
+    type Output = str;
+
+    #[inline]
+    fn index(&self, _index: ops::RangeFull) -> &str {
+        self.as_str()
+    }
+}
+impl ops::Index<ops::RangeInclusive<usize>> for IString {
+    type Output = str;
+
+    #[inline]
+    fn index(&self, index: ops::RangeInclusive<usize>) -> &str {
+        Index::index(&**self, index)
+    }
+}
+impl ops::Index<ops::RangeToInclusive<usize>> for IString {
+    type Output = str;
+
+    #[inline]
+    fn index(&self, index: ops::RangeToInclusive<usize>) -> &str {
+        Index::index(&**self, index)
+    }
+}
+
 #[test]
 fn main() {
-    let mut s1 = IString::from("Hello World!");
-    println!("s1: {:?}", s1);
-    let s2 = IString::from("Hello World! .........xyz");
-    println!("s2: {:?}", s2);
-    s1.push_str("_.........xyz");
-    println!("s1: {:?}", s1);
+    let p1 = "Hello World!";
+    let p2 = "Hello World! .........xyz";
+    let p3 = " .........xyz";
+    
+    let s1 = IString::from(p1);
+    assert_eq!(s1, p1);
+    
+    let s2 = IString::from(p2);
+    assert_eq!(s2, p2);
+    
+    let mut s3 = s1.clone();
+    s3.push_str(p3);
+    assert_eq!(s3, p2);
 }
