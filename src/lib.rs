@@ -20,8 +20,7 @@
 #![no_std]
 
 /*!
-I String type hat has the same size as `String`,
-but allows the whole size, except for one byte to inline the data.
+A replacement for String that allows storing strings of length up to sizeof<String>() - 1 without a heap allocation
 
 That means on 32bit machines: size_of::<IString>() == 12 bytes, inline capacity: 11 bytes
 on 64bit machines: size_of::<IString>() == 24 bytes, inline capacity: 23 bytes
