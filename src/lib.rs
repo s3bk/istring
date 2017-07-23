@@ -89,6 +89,11 @@ pub struct Heap {
     pub cap:    usize
 }
 
+pub enum InlineOrHeap {
+    Inline(Inline),
+    Heap(Heap)
+}
+
 pub union IString {
     inline: Inline,
     heap:   Heap
@@ -141,6 +146,9 @@ impl IString {
         assert!(!self.is_inline());
         &mut self.heap
     }
+
+    //#[inline]
+    //pub fn as_inline_or_heap(self) 
     
     #[inline(always)]
     pub fn is_inline(&self) -> bool {
@@ -338,6 +346,7 @@ impl IString {
     }
 }
 impl Drop for IString {
+    #[inline]
     fn drop(&mut self) {
         if !self.is_inline() {
             unsafe {
