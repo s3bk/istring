@@ -58,14 +58,14 @@ const MAX_CAPACITY: usize = (1 << 31) - 1;
 #[cfg(target_endian = "little")]
 #[derive(Copy, Clone)]
 #[repr(C)]
-struct Inline {
+pub struct Inline {
     data:   [u8; INLINE_CAPACITY],
     len:    u8
 }
 #[cfg(target_endian = "little")]
 #[derive(Copy, Clone)]
 #[repr(C)]
-struct Heap {
+pub struct Heap {
     ptr:    *mut u8,
     cap:    usize,
     len:    usize
@@ -74,7 +74,7 @@ struct Heap {
 #[cfg(target_endian = "big")]
 #[derive(Copy, Clone)]
 #[repr(C)]
-struct Inline {
+pub struct Inline {
     len:    u8,
     data:   [u8; INLINE_CAPACITY],
 }
@@ -82,7 +82,7 @@ struct Inline {
 #[cfg(target_endian = "big")]
 #[derive(Copy, Clone)]
 #[repr(C)]
-struct Heap {
+pub struct Heap {
     len:    usize,
     ptr:    *mut u8,
     cap:    usize
@@ -119,6 +119,22 @@ impl IString {
                 inline: Inline { data: [0; INLINE_CAPACITY], len: IS_INLINE }
             }
         }
+    }
+
+    /// view as Inline.
+    ///
+    /// Panics if the string isn't inlined
+    pub unsafe fn as_inline(&mut self) -> &mut Inline {
+        assert!(self.is_inline());
+        &mut self.inline
+    }
+
+    /// view as Heap.
+    ///
+    /// Panics if the string isn't on the Heap
+    pub unsafe fn as_heap(&mut self) -> &mut Heap {
+        assert!(!self.is_inline());
+        &mut self.heap
     }
     
     #[inline(always)]
