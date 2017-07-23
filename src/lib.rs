@@ -59,33 +59,33 @@ const MAX_CAPACITY: usize = (1 << 31) - 1;
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Inline {
-    data:   [u8; INLINE_CAPACITY],
-    len:    u8
+    pub data:   [u8; INLINE_CAPACITY],
+    pub len:    u8
 }
 #[cfg(target_endian = "little")]
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Heap {
-    ptr:    *mut u8,
-    cap:    usize,
-    len:    usize
+    pub ptr:    *mut u8,
+    pub cap:    usize,
+    pub len:    usize
 }
 
 #[cfg(target_endian = "big")]
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Inline {
-    len:    u8,
-    data:   [u8; INLINE_CAPACITY],
+    pub len:    u8,
+    pub data:   [u8; INLINE_CAPACITY],
 }
 
 #[cfg(target_endian = "big")]
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Heap {
-    len:    usize,
-    ptr:    *mut u8,
-    cap:    usize
+    pub len:    usize,
+    pub ptr:    *mut u8,
+    pub cap:    usize
 }
 
 pub union IString {
