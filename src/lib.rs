@@ -16,7 +16,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(untagged_unions, alloc, heap_api, str_mut_extras, inclusive_range)]
+#![feature(untagged_unions, alloc, str_mut_extras, inclusive_range, allocator_api)]
 #![no_std]
 
 /*!
@@ -34,9 +34,11 @@ use core::clone::Clone;
 use core::iter::Extend;
 use core::ops::{self, Index, Add, AddAssign};
 use core::hash;
-use alloc::{String, Vec};
+use alloc::{String, Vec, heap};
 use alloc::borrow::Cow;
 use alloc::string::FromUtf8Error;
+use alloc::allocator::{Alloc, Layout};
+use heap::Heap as HeapAlloc;
 
 const IS_INLINE: u8 = 1 << 7;
 const LEN_MASK: u8 = !IS_INLINE;
@@ -109,7 +111,7 @@ impl IString {
         
         if capacity > INLINE_CAPACITY {
             unsafe {
-                let ptr = alloc::heap::allocate(capacity, 1);
+                let ptr = HeapAlloc.alloc(Layout::from_size_align_unchecked(capacity, 1)).unwrap();
                 IString { heap: Heap { ptr: ptr, len: 0, cap: capacity } }
             }
         } else {
@@ -155,7 +157,8 @@ impl IString {
         }
     }
     
-    /// un-inline the string and expand the capacity to `cap`
+    /// un-inline the string and expand the capacity to `cap`.
+    ///
     /// does nothing if it isn't inlined.
     /// panics, if `cap` < `self.len()`
     pub fn move_to_heap(&mut self, cap: usize) {
@@ -165,7 +168,7 @@ impl IString {
             
             unsafe {
                 let len = self.len();
-                let ptr = alloc::heap::allocate(cap, 1);
+                let ptr = HeapAlloc.alloc(Layout::from_size_align_unchecked(cap, 1)).unwrap();
                 copy_nonoverlapping(self.inline.data.as_ptr(), ptr, len);
                 self.heap = Heap { ptr: ptr, len: len, cap: cap };
             }
@@ -181,7 +184,7 @@ impl IString {
                 let heap = self.heap;
                 self.inline.len = len as u8 | IS_INLINE;
                 copy_nonoverlapping(heap.ptr, self.inline.data.as_mut_ptr(), len);
-                alloc::heap::deallocate(heap.ptr, heap.cap, 1);
+                HeapAlloc.dealloc(heap.ptr, Layout::from_size_align_unchecked(heap.cap, 1));
             }
         } else {
             self.resize(len);
@@ -215,7 +218,11 @@ impl IString {
         assert!(new_cap >= self.len());
         
         unsafe {
-            let ptr = alloc::heap::reallocate(self.heap.ptr, self.heap.cap, new_cap, 1);
+            let ptr = HeapAlloc.realloc(
+                self.heap.ptr,
+                Layout::from_size_align_unchecked(self.heap.cap, 1),
+                Layout::from_size_align_unchecked(new_cap, 1)
+            ).unwrap();
             self.heap.ptr = ptr;
             self.heap.cap = new_cap;
         }
@@ -313,7 +320,7 @@ impl Drop for IString {
     fn drop(&mut self) {
         if !self.is_inline() {
             unsafe {
-                alloc::heap::deallocate(self.heap.ptr, self.heap.cap, 1);
+                HeapAlloc.dealloc(self.heap.ptr, Layout::from_size_align_unchecked(self.heap.cap, 1));
             }
         }
     }
