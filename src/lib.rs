@@ -28,7 +28,7 @@ on 64bit machines: size_of::<IString>() == 24 bytes, inline capacity: 23 bytes
 
 extern crate alloc;
 
-use core::{fmt, slice, str, convert, mem};
+use core::{fmt, slice, str, convert, mem, cmp};
 use core::ptr::copy_nonoverlapping;
 use core::clone::Clone;
 use core::iter::Extend;
@@ -411,6 +411,7 @@ impl Clone for IString {
     }
 }
 
+
 impl PartialEq<str> for IString {
     fn eq(&self, rhs: &str) -> bool {
         self.as_str() == rhs
@@ -429,6 +430,29 @@ impl PartialEq<String> for IString {
 impl PartialEq for IString {
     fn eq(&self, rhs: &IString) -> bool {
         self.as_str() == rhs.as_str()
+    }
+}
+impl Eq for IString {}
+impl cmp::PartialOrd for IString {
+    fn partial_cmp(&self, rhs: &IString) -> Option<cmp::Ordering> {
+        self.as_str().partial_cmp(rhs.as_str())
+    }
+    fn lt(&self, rhs: &IString) -> bool {
+        self.as_str().lt(rhs.as_str())
+    }
+    fn le(&self, rhs: &IString) -> bool {
+        self.as_str().le(rhs.as_str())
+    }
+    fn gt(&self, rhs: &IString) -> bool {
+        self.as_str().gt(rhs.as_str())
+    }
+    fn ge(&self, rhs: &IString) -> bool {
+        self.as_str().ge(rhs.as_str())
+    }
+}
+impl cmp::Ord for IString {
+    fn cmp(&self, other: &IString) -> cmp::Ordering {
+        self.as_str().cmp(other.as_str())
     }
 }
 impl fmt::Write for IString {
