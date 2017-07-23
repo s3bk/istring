@@ -256,7 +256,8 @@ impl IString {
             self.heap.cap = new_cap;
         }
     }
-    
+
+    #[inline)]
     pub fn push_str(&mut self, s: &str) {
         let old_len = self.len();
         let new_len = old_len + s.len();
