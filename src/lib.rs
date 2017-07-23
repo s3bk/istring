@@ -16,7 +16,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(untagged_unions, alloc, str_mut_extras, inclusive_range, allocator_api)]
+#![feature(untagged_unions, alloc, str_mut_extras, inclusive_range, allocator_api, unique)]
 #![no_std]
 
 /*!
@@ -34,6 +34,7 @@ use core::clone::Clone;
 use core::iter::Extend;
 use core::ops::{self, Index, Add, AddAssign};
 use core::hash;
+use core::ptr::Unique;
 use alloc::{String, Vec, heap};
 use alloc::borrow::Cow;
 use alloc::string::FromUtf8Error;
@@ -66,7 +67,7 @@ pub struct Inline {
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Heap {
-    pub ptr:    *mut u8,
+    pub ptr:    Unique<u8>,
     pub cap:    usize,
     pub len:    usize
 }
@@ -84,7 +85,7 @@ pub struct Inline {
 #[repr(C)]
 pub struct Heap {
     pub len:    usize,
-    pub ptr:    *mut u8,
+    pub ptr:    Unique<u8>,
     pub cap:    usize
 }
 
@@ -112,7 +113,7 @@ impl IString {
         if capacity > INLINE_CAPACITY {
             unsafe {
                 let ptr = HeapAlloc.alloc(Layout::from_size_align_unchecked(capacity, 1)).unwrap();
-                IString { heap: Heap { ptr: ptr, len: 0, cap: capacity } }
+                IString { heap: Heap { ptr: Unique::new(ptr), len: 0, cap: capacity } }
             }
         } else {
             IString {
@@ -186,7 +187,7 @@ impl IString {
                 let len = self.len();
                 let ptr = HeapAlloc.alloc(Layout::from_size_align_unchecked(cap, 1)).unwrap();
                 copy_nonoverlapping(self.inline.data.as_ptr(), ptr, len);
-                self.heap = Heap { ptr: ptr, len: len, cap: cap };
+                self.heap = Heap { ptr: Unique::new(ptr), len: len, cap: cap };
             }
         }
     }
@@ -199,8 +200,8 @@ impl IString {
             unsafe {
                 let heap = self.heap;
                 self.inline.len = len as u8 | IS_INLINE;
-                copy_nonoverlapping(heap.ptr, self.inline.data.as_mut_ptr(), len);
-                HeapAlloc.dealloc(heap.ptr, Layout::from_size_align_unchecked(heap.cap, 1));
+                copy_nonoverlapping(heap.ptr.as_ptr(), self.inline.data.as_mut_ptr(), len);
+                HeapAlloc.dealloc(heap.ptr.as_ptr(), Layout::from_size_align_unchecked(heap.cap, 1));
             }
         } else {
             self.resize(len);
@@ -214,7 +215,7 @@ impl IString {
             if self.is_inline() {
                 &self.inline.data[.. len]
             } else {
-                slice::from_raw_parts(self.heap.ptr, len)
+                slice::from_raw_parts(self.heap.ptr.as_ptr(), len)
             }
         }
     }
@@ -225,7 +226,7 @@ impl IString {
         if self.is_inline() {
             &mut self.inline.data[.. len]
         } else {
-            slice::from_raw_parts_mut(self.heap.ptr, len)
+            slice::from_raw_parts_mut(self.heap.ptr.as_ptr(), len)
         }
     }
     
@@ -235,11 +236,11 @@ impl IString {
         
         unsafe {
             let ptr = HeapAlloc.realloc(
-                self.heap.ptr,
+                self.heap.ptr.as_ptr(),
                 Layout::from_size_align_unchecked(self.heap.cap, 1),
                 Layout::from_size_align_unchecked(new_cap, 1)
             ).unwrap();
-            self.heap.ptr = ptr;
+            self.heap.ptr = Unique::new(ptr);
             self.heap.cap = new_cap;
         }
     }
@@ -336,7 +337,7 @@ impl Drop for IString {
     fn drop(&mut self) {
         if !self.is_inline() {
             unsafe {
-                HeapAlloc.dealloc(self.heap.ptr, Layout::from_size_align_unchecked(self.heap.cap, 1));
+                HeapAlloc.dealloc(self.heap.ptr.as_ptr(), Layout::from_size_align_unchecked(self.heap.cap, 1));
             }
         }
     }
@@ -374,7 +375,7 @@ impl convert::From<String> for IString {
     fn from(s: String) -> IString {
         let mut s = s.into_bytes();
         let heap = Heap {
-            ptr:    s.as_mut_ptr(),
+            ptr:    unsafe { Unique::new(s.as_mut_ptr()) },
             len:    s.len(),
             cap:    s.capacity()
         };
@@ -392,7 +393,7 @@ impl convert::Into<String> for IString {
         }
         
         unsafe {
-            String::from_raw_parts(self.heap.ptr, self.heap.len, self.heap.cap)
+            String::from_raw_parts(self.heap.ptr.as_ptr(), self.heap.len, self.heap.cap)
         }
     }
 }
