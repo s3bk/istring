@@ -102,11 +102,13 @@ fn test_layout() {
 }
 
 impl IString {
+    #[inline(always)]
     pub fn new() -> IString {
         IString {
             inline: Inline { data: [0; INLINE_CAPACITY], len: IS_INLINE }
         }
     }
+    #[inline]
     pub fn with_capacity(capacity: usize) -> IString {
         assert!(capacity < MAX_CAPACITY);
         
@@ -125,6 +127,7 @@ impl IString {
     /// view as Inline.
     ///
     /// Panics if the string isn't inlined
+    #[inline(always)]
     pub unsafe fn as_inline(&mut self) -> &mut Inline {
         assert!(self.is_inline());
         &mut self.inline
@@ -133,6 +136,7 @@ impl IString {
     /// view as Heap.
     ///
     /// Panics if the string isn't on the Heap
+    #[inline(always)]
     pub unsafe fn as_heap(&mut self) -> &mut Heap {
         assert!(!self.is_inline());
         &mut self.heap
@@ -399,6 +403,7 @@ impl convert::Into<String> for IString {
 }
 
 impl Clone for IString {
+    #[inline]
     fn clone(&self) -> IString {
         if self.is_inline() {
             // simple case
@@ -413,49 +418,60 @@ impl Clone for IString {
 
 
 impl PartialEq<str> for IString {
+    #[inline(always)]
     fn eq(&self, rhs: &str) -> bool {
         self.as_str() == rhs
     }
 }
 impl<'a> PartialEq<&'a str> for IString {
+    #[inline(always)]
     fn eq(&self, rhs: &&'a str) -> bool {
         self.as_str() == *rhs
     }
 }
 impl PartialEq<String> for IString {
+    #[inline(always)]
     fn eq(&self, rhs: &String) -> bool {
         self.as_str() == rhs
     }
 }
 impl PartialEq for IString {
+    #[inline(always)]
     fn eq(&self, rhs: &IString) -> bool {
         self.as_str() == rhs.as_str()
     }
 }
 impl Eq for IString {}
 impl cmp::PartialOrd for IString {
+    #[inline(always)]
     fn partial_cmp(&self, rhs: &IString) -> Option<cmp::Ordering> {
         self.as_str().partial_cmp(rhs.as_str())
     }
+    #[inline(always)]
     fn lt(&self, rhs: &IString) -> bool {
         self.as_str().lt(rhs.as_str())
     }
+    #[inline(always)]
     fn le(&self, rhs: &IString) -> bool {
         self.as_str().le(rhs.as_str())
     }
+    #[inline(always)]
     fn gt(&self, rhs: &IString) -> bool {
         self.as_str().gt(rhs.as_str())
     }
+    #[inline(always)]
     fn ge(&self, rhs: &IString) -> bool {
         self.as_str().ge(rhs.as_str())
     }
 }
 impl cmp::Ord for IString {
+    #[inline(always)]
     fn cmp(&self, other: &IString) -> cmp::Ordering {
         self.as_str().cmp(other.as_str())
     }
 }
 impl fmt::Write for IString {
+    #[inline(always)]
     fn write_str(&mut self, s: &str) -> fmt::Result {
         self.push_str(s);
         Ok(())
@@ -463,6 +479,7 @@ impl fmt::Write for IString {
 }
 
 impl Extend<char> for IString {
+    #[inline]
     fn extend<I: IntoIterator<Item = char>>(&mut self, iter: I) {
         let iterator = iter.into_iter();
         let (lower_bound, _) = iterator.size_hint();
@@ -473,11 +490,13 @@ impl Extend<char> for IString {
     }
 }
 impl<'a> Extend<&'a char> for IString {
+    #[inline(always)]
     fn extend<I: IntoIterator<Item = &'a char>>(&mut self, iter: I) {
         self.extend(iter.into_iter().cloned());
     }
 }
 impl<'a> Extend<&'a str> for IString {
+    #[inline(always)]
     fn extend<I: IntoIterator<Item = &'a str>>(&mut self, iter: I) {
         for s in iter {
             self.push_str(s)
@@ -485,6 +504,7 @@ impl<'a> Extend<&'a str> for IString {
     }
 }
 impl<'a> Extend<Cow<'a, str>> for IString {
+    #[inline(always)]
     fn extend<I: IntoIterator<Item = Cow<'a, str>>>(&mut self, iter: I) {
         for s in iter {
             self.push_str(&s)
@@ -493,14 +513,14 @@ impl<'a> Extend<Cow<'a, str>> for IString {
 }
 
 impl Default for IString {
-    #[inline]
+    #[inline(always)]
     fn default() -> IString {
         IString::new()
     }
 }
 
 impl hash::Hash for IString {
-    #[inline]
+    #[inline(always)]
     fn hash<H: hash::Hasher>(&self, hasher: &mut H) {
         (**self).hash(hasher)
     }
@@ -509,7 +529,7 @@ impl hash::Hash for IString {
 impl<'a> Add<&'a str> for IString {
     type Output = IString;
 
-    #[inline]
+    #[inline(always)]
     fn add(mut self, other: &str) -> IString {
         self.push_str(other);
         self
