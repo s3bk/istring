@@ -28,7 +28,7 @@ on 64bit machines: size_of::<IString>() == 24 bytes, inline capacity: 23 bytes
 
 extern crate alloc;
 
-use core::{fmt, slice, str, convert, mem, cmp};
+use core::{fmt, slice, str, convert, mem, cmp, ptr};
 use core::ptr::copy_nonoverlapping;
 use core::clone::Clone;
 use core::iter::Extend;
@@ -361,6 +361,51 @@ impl<A: Alloc> IString<A> {
     pub fn truncate(&mut self, new_len: usize) {
         if new_len < self.len() {
             unsafe { self.set_len(new_len) }
+        }
+    }
+
+    /// Deconstruct into the Heap part and the allocator
+    ///
+    /// Assumes it is heap-state, panics otherwhise. (you may want to call move_to_heap before this.)
+    /// The caller is responsible to adequatly dispose the owned memory. (for example by calling IString::from_heap)
+    #[inline(always)]
+    pub fn to_heap(self) -> (Heap, A) {
+        assert_eq!(self.is_inline(), false);
+        unsafe {
+            let heap = self.union.heap;
+            let alloc = ptr::read(&self.alloc);
+            mem::forget(self);
+            
+            (heap, alloc)
+        }
+    }
+    
+    /// Deconstruct into the Inline part and the allocator
+    ///
+    /// Assumes the string is inlined and panics otherwhise.
+    #[inline(always)]
+    pub fn to_inline(self) -> (Inline, A) {
+        assert_eq!(self.is_inline(), true);
+        unsafe {
+            let mut inline = self.union.inline;
+            let alloc = ptr::read(&self.alloc);
+            mem::forget(self);
+            
+            inline.len &= !IS_INLINE; // clear the bit
+            (inline, alloc)
+        }
+    }
+    pub unsafe fn from_heap(heap: Heap, alloc: A) -> Self {
+        let union = IStringUnion { heap: heap };
+        assert_eq!(union.inline.len & IS_INLINE, 0);
+        IString { union: union, alloc: alloc }
+    }
+    pub unsafe fn from_inline(mut inline: Inline, alloc: A) -> Self {
+        assert!(inline.len as usize <= INLINE_CAPACITY);
+        inline.len |= IS_INLINE; // set inline bit
+        IString {
+            union: IStringUnion { inline: inline },
+            alloc: alloc
         }
     }
 }
