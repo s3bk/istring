@@ -16,7 +16,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(untagged_unions, alloc, str_mut_extras, inclusive_range, allocator_api, unique)]
+#![feature(untagged_unions, alloc, inclusive_range, allocator_api, unique)]
 #![no_std]
 
 /*!
@@ -31,10 +31,11 @@ extern crate alloc;
 use core::{fmt, slice, str, convert, mem, cmp, ptr};
 use core::ptr::copy_nonoverlapping;
 use core::clone::Clone;
-use core::iter::Extend;
+use core::iter::{FromIterator, IntoIterator, Extend};
 use core::ops::{self, Index, Add, AddAssign};
 use core::hash;
 use core::ptr::Unique;
+use core::borrow::Borrow;
 use alloc::{String, Vec, heap};
 use alloc::borrow::Cow;
 use alloc::string::FromUtf8Error;
@@ -139,7 +140,13 @@ impl<A: Alloc> IString<A> {
             IString{
                 union: unsafe {
                     let ptr = a.alloc(Layout::from_size_align_unchecked(capacity, 1)).unwrap();
-                    IStringUnion { heap: Heap { ptr: Unique::new(ptr), len: 0, cap: capacity } }
+                    IStringUnion {
+                        heap: Heap {
+                            ptr: Unique::new(ptr).unwrap(),
+                            len: 0,
+                            cap: capacity
+                        }
+                    }
                 },
                 alloc: a
             }
@@ -223,7 +230,11 @@ impl<A: Alloc> IString<A> {
                 let len = self.len();
                 let ptr = HeapAlloc.alloc(Layout::from_size_align_unchecked(cap, 1)).unwrap();
                 copy_nonoverlapping(self.union.inline.data.as_ptr(), ptr, len);
-                self.union.heap = Heap { ptr: Unique::new(ptr), len: len, cap: cap };
+                self.union.heap = Heap {
+                    ptr: Unique::new(ptr).unwrap(),
+                    len,
+                    cap
+                };
             }
         }
     }
@@ -276,7 +287,7 @@ impl<A: Alloc> IString<A> {
                 Layout::from_size_align_unchecked(self.union.heap.cap, 1),
                 Layout::from_size_align_unchecked(new_cap, 1)
             ).unwrap();
-            self.union.heap.ptr = Unique::new(ptr);
+            self.union.heap.ptr = Unique::new(ptr).unwrap();
             self.union.heap.cap = new_cap;
         }
     }
@@ -458,17 +469,23 @@ impl convert::From<String> for IString {
     #[inline]
     fn from(s: String) -> IString {
         let mut s = s.into_bytes();
-        let heap = Heap {
-            ptr:    unsafe { Unique::new(s.as_mut_ptr()) },
-            len:    s.len(),
-            cap:    s.capacity()
+        let istring = if s.capacity() != 0 {
+            let heap = Heap {
+                ptr:    Unique::new(s.as_mut_ptr()).unwrap(),
+                len:    s.len(),
+                cap:    s.capacity()
+            };
+
+            IString {
+                union: IStringUnion { heap: heap },
+                alloc: HeapAlloc
+            }
+        } else {
+            IString::new()
         };
+        // the original String must not drop
         mem::forget(s);
-        
-        IString {
-            union: IStringUnion { heap: heap },
-            alloc: HeapAlloc
-        }
+        istring
     }
 }
 impl convert::Into<String> for IString {
@@ -480,7 +497,11 @@ impl convert::Into<String> for IString {
         }
         
         unsafe {
-            String::from_raw_parts(self.union.heap.ptr.as_ptr(), self.union.heap.len, self.union.heap.cap)
+            let s = String::from_raw_parts(self.union.heap.ptr.as_ptr(), self.union.heap.len, self.union.heap.cap);
+
+            // the IString must not drop
+            mem::forget(self);
+            s
         }
     }
 }
@@ -674,6 +695,27 @@ impl<A: Alloc> ops::Index<ops::RangeToInclusive<usize>> for IString<A> {
     #[inline]
     fn index(&self, index: ops::RangeToInclusive<usize>) -> &str {
         Index::index(&**self, index)
+    }
+}
+
+impl<A: Alloc> Borrow<str> for IString<A> {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl FromIterator<char> for IString {
+    fn from_iter<T>(iter: T) -> Self where T: IntoIterator<Item=char> {
+        let mut s = IString::new();
+        s.extend(iter);
+        s
+    }
+}
+impl<'a> FromIterator<&'a str> for IString {
+    fn from_iter<T>(iter: T) -> Self where T: IntoIterator<Item=&'a str> {
+        let mut s = IString::new();
+        s.extend(iter);
+        s
     }
 }
 
