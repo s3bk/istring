@@ -16,7 +16,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(untagged_unions, alloc, inclusive_range, allocator_api, unique)]
+#![feature(untagged_unions, alloc, inclusive_range, allocator_api, unique, ptr_internals)]
 #![no_std]
 
 /*!
