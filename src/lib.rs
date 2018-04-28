@@ -121,6 +121,7 @@ impl IString {
         IString::with_capacity_in(capacity, Global)
     }
 }
+unsafe impl<A: Send + Alloc> Send for IString<A> {}
     
 impl<A: Alloc> IString<A> {
     #[inline(always)]
