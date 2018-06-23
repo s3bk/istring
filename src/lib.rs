@@ -251,7 +251,7 @@ impl<A: Alloc> IString<A> {
                 let heap = self.union.heap;
                 self.union.inline.len = len as u8 | IS_INLINE;
                 copy_nonoverlapping(heap.ptr.as_ptr(), self.union.inline.data.as_mut_ptr(), len);
-                Global.dealloc(heap.ptr.as_opaque(), Layout::from_size_align_unchecked(heap.cap, 1));
+                Global.dealloc(heap.ptr, Layout::from_size_align_unchecked(heap.cap, 1));
             }
         } else {
             self.resize(len);
@@ -286,7 +286,7 @@ impl<A: Alloc> IString<A> {
         
         unsafe {
             let ptr = Global.realloc(
-                self.union.heap.ptr.as_opaque(),
+                self.union.heap.ptr,
                 Layout::from_size_align_unchecked(self.union.heap.cap, 1),
                 new_cap
             ).expect("reallocation failed");
@@ -428,7 +428,7 @@ impl<A: Alloc> Drop for IString<A> {
     fn drop(&mut self) {
         if !self.is_inline() {
             unsafe {
-                Global.dealloc(self.union.heap.ptr.as_opaque(), Layout::from_size_align_unchecked(self.union.heap.cap, 1));
+                Global.dealloc(self.union.heap.ptr, Layout::from_size_align_unchecked(self.union.heap.cap, 1));
             }
         }
     }
