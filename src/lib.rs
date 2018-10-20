@@ -16,7 +16,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(untagged_unions, alloc, inclusive_range, allocator_api, unique, ptr_internals)]
+#![feature(untagged_unions, alloc, allocator_api, ptr_internals)]
 #![no_std]
 
 /*!
@@ -36,10 +36,10 @@ use core::ops::{self, Index, Add, AddAssign};
 use core::hash;
 use core::ptr::NonNull;
 use core::borrow::Borrow;
-use alloc::{String, Vec};
+use alloc::{string::String, vec::Vec};
 use alloc::borrow::Cow;
 use alloc::string::FromUtf8Error;
-use alloc::allocator::{Alloc, Layout};
+use alloc::alloc::{Alloc, Layout};
 use alloc::alloc::Global;
 
 const IS_INLINE: u8 = 1 << 7;
