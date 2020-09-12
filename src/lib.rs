@@ -16,7 +16,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(untagged_unions, alloc, allocator_api, ptr_internals)]
+#![feature(untagged_unions, allocator_api, ptr_internals)]
 #![no_std]
 
 /*!
@@ -39,8 +39,7 @@ use core::borrow::Borrow;
 use alloc::{string::String, vec::Vec};
 use alloc::borrow::Cow;
 use alloc::string::FromUtf8Error;
-use alloc::alloc::{Alloc, Layout};
-use alloc::alloc::Global;
+use alloc::alloc::{AllocRef, Layout, Global, AllocInit, ReallocPlacement};
 
 const IS_INLINE: u8 = 1 << 7;
 const LEN_MASK: u8 = !IS_INLINE;
@@ -99,7 +98,7 @@ pub union IStringUnion {
     inline: Inline,
     heap:   Heap
 }
-pub struct IString<A: Alloc=Global> {
+pub struct IString<A: AllocRef=Global> {
     union: IStringUnion,
     alloc: A
 }
@@ -121,9 +120,9 @@ impl IString {
         IString::with_capacity_in(capacity, Global)
     }
 }
-unsafe impl<A: Send + Alloc> Send for IString<A> {}
+unsafe impl<A: Send + AllocRef> Send for IString<A> {}
     
-impl<A: Alloc> IString<A> {
+impl<A: AllocRef> IString<A> {
     #[inline(always)]
     pub fn new_in(a: A) -> IString<A> {
         IString {
@@ -134,31 +133,31 @@ impl<A: Alloc> IString<A> {
         }
     }
     #[inline]
-    pub fn with_capacity_in(capacity: usize, mut a: A) -> IString<A> {
+    pub fn with_capacity_in(capacity: usize, mut alloc: A) -> IString<A> {
         assert!(capacity < MAX_CAPACITY);
         
         if capacity > INLINE_CAPACITY {
             IString{
                 union: unsafe {
-                    let ptr = a.alloc(Layout::from_size_align_unchecked(capacity, 1))
-                        .expect("failed to allocate memory")
-                        .cast();
+                    let block = alloc.alloc(Layout::from_size_align_unchecked(capacity, 1), AllocInit::Uninitialized)
+                        .expect("failed to allocate memory");
+                    
                     IStringUnion {
                         heap: Heap {
-                            ptr: ptr,
+                            ptr: block.ptr.cast(),
                             len: 0,
-                            cap: capacity
+                            cap: block.size
                         }
                     }
                 },
-                alloc: a
+                alloc
             }
         } else {
             IString {
                 union: IStringUnion {
                     inline: Inline { data: [0; INLINE_CAPACITY], len: IS_INLINE }
                 },
-                alloc: a
+                alloc
             }
         }
     }
@@ -231,12 +230,16 @@ impl<A: Alloc> IString<A> {
             
             unsafe {
                 let len = self.len();
-                let ptr = Global.alloc(Layout::from_size_align_unchecked(cap, 1)).unwrap().cast();
+                let block = self.alloc.alloc(
+                    Layout::from_size_align_unchecked(cap, 1),
+                    AllocInit::Uninitialized)
+                .unwrap();
+                let ptr = block.ptr.cast();
                 copy_nonoverlapping(self.union.inline.data.as_ptr(), ptr.as_ptr(), len);
                 self.union.heap = Heap {
-                    ptr: ptr,
+                    ptr,
                     len,
-                    cap
+                    cap: block.size
                 };
             }
         }
@@ -285,13 +288,15 @@ impl<A: Alloc> IString<A> {
         assert!(new_cap >= self.len());
         
         unsafe {
-            let ptr = Global.realloc(
+            let block = self.alloc.grow(
                 self.union.heap.ptr,
                 Layout::from_size_align_unchecked(self.union.heap.cap, 1),
-                new_cap
+                new_cap,
+                ReallocPlacement::MayMove,
+                AllocInit::Uninitialized
             ).expect("reallocation failed");
-            self.union.heap.ptr = ptr.cast();
-            self.union.heap.cap = new_cap;
+            self.union.heap.ptr = block.ptr.cast();
+            self.union.heap.cap = block.size;
         }
     }
 
@@ -423,7 +428,7 @@ impl<A: Alloc> IString<A> {
         }
     }
 }
-impl<A: Alloc> Drop for IString<A> {
+impl<A: AllocRef> Drop for IString<A> {
     #[inline]
     fn drop(&mut self) {
         if !self.is_inline() {
@@ -440,7 +445,7 @@ impl IString {
         s.into_bytes()
     }
 }
-impl<A: Alloc> ops::Deref for IString<A> {
+impl<A: AllocRef> ops::Deref for IString<A> {
     type Target = str;
     
     #[inline(always)]
@@ -448,13 +453,13 @@ impl<A: Alloc> ops::Deref for IString<A> {
         self.as_str()
     }
 }
-impl<A: Alloc> fmt::Debug for IString<A> {
+impl<A: AllocRef> fmt::Debug for IString<A> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         <str as fmt::Debug>::fmt(&*self, f)
     }
 }
-impl<A: Alloc> fmt::Display for IString<A> {
+impl<A: AllocRef> fmt::Display for IString<A> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         <str as fmt::Display>::fmt(&*self, f)
@@ -509,7 +514,7 @@ impl convert::Into<String> for IString {
     }
 }
 
-impl<A: Alloc+Clone> Clone for IString<A> {
+impl<A: AllocRef+Clone> Clone for IString<A> {
     #[inline]
     fn clone(&self) -> IString<A> {
         if self.is_inline() {
@@ -527,32 +532,32 @@ impl<A: Alloc+Clone> Clone for IString<A> {
 }
 
 
-impl<A: Alloc> PartialEq<str> for IString<A> {
+impl<A: AllocRef> PartialEq<str> for IString<A> {
     #[inline(always)]
     fn eq(&self, rhs: &str) -> bool {
         self.as_str() == rhs
     }
 }
-impl<'a, A: Alloc> PartialEq<&'a str> for IString<A> {
+impl<'a, A: AllocRef> PartialEq<&'a str> for IString<A> {
     #[inline(always)]
     fn eq(&self, rhs: &&'a str) -> bool {
         self.as_str() == *rhs
     }
 }
-impl<A: Alloc> PartialEq<String> for IString<A> {
+impl<A: AllocRef> PartialEq<String> for IString<A> {
     #[inline(always)]
     fn eq(&self, rhs: &String) -> bool {
         self.as_str() == rhs
     }
 }
-impl<A: Alloc, B: Alloc> PartialEq<IString<B>> for IString<A> {
+impl<A: AllocRef, B: AllocRef> PartialEq<IString<B>> for IString<A> {
     #[inline(always)]
     fn eq(&self, rhs: &IString<B>) -> bool {
         self.as_str() == rhs.as_str()
     }
 }
-impl<A: Alloc> Eq for IString<A> {}
-impl<A: Alloc> cmp::PartialOrd for IString<A> {
+impl<A: AllocRef> Eq for IString<A> {}
+impl<A: AllocRef> cmp::PartialOrd for IString<A> {
     #[inline(always)]
     fn partial_cmp(&self, rhs: &Self) -> Option<cmp::Ordering> {
         self.as_str().partial_cmp(rhs.as_str())
@@ -574,13 +579,13 @@ impl<A: Alloc> cmp::PartialOrd for IString<A> {
         self.as_str().ge(rhs.as_str())
     }
 }
-impl<A: Alloc> cmp::Ord for IString<A> {
+impl<A: AllocRef> cmp::Ord for IString<A> {
     #[inline(always)]
     fn cmp(&self, other: &IString<A>) -> cmp::Ordering {
         self.as_str().cmp(other.as_str())
     }
 }
-impl<A: Alloc> fmt::Write for IString<A> {
+impl<A: AllocRef> fmt::Write for IString<A> {
     #[inline(always)]
     fn write_str(&mut self, s: &str) -> fmt::Result {
         self.push_str(s);
@@ -588,7 +593,7 @@ impl<A: Alloc> fmt::Write for IString<A> {
     }
 }
 
-impl<A: Alloc> Extend<char> for IString<A> {
+impl<A: AllocRef> Extend<char> for IString<A> {
     #[inline]
     fn extend<I: IntoIterator<Item = char>>(&mut self, iter: I) {
         let iterator = iter.into_iter();
@@ -599,13 +604,13 @@ impl<A: Alloc> Extend<char> for IString<A> {
         }
     }
 }
-impl<'a, A: Alloc> Extend<&'a char> for IString<A> {
+impl<'a, A: AllocRef> Extend<&'a char> for IString<A> {
     #[inline(always)]
     fn extend<I: IntoIterator<Item = &'a char>>(&mut self, iter: I) {
         self.extend(iter.into_iter().cloned());
     }
 }
-impl<'a, A: Alloc> Extend<&'a str> for IString<A> {
+impl<'a, A: AllocRef> Extend<&'a str> for IString<A> {
     #[inline(always)]
     fn extend<I: IntoIterator<Item = &'a str>>(&mut self, iter: I) {
         for s in iter {
@@ -613,7 +618,7 @@ impl<'a, A: Alloc> Extend<&'a str> for IString<A> {
         }
     }
 }
-impl<'a, A: Alloc> Extend<Cow<'a, str>> for IString<A> {
+impl<'a, A: AllocRef> Extend<Cow<'a, str>> for IString<A> {
     #[inline(always)]
     fn extend<I: IntoIterator<Item = Cow<'a, str>>>(&mut self, iter: I) {
         for s in iter {
@@ -629,14 +634,14 @@ impl Default for IString {
     }
 }
 
-impl<A: Alloc> hash::Hash for IString<A> {
+impl<A: AllocRef> hash::Hash for IString<A> {
     #[inline(always)]
     fn hash<H: hash::Hasher>(&self, hasher: &mut H) {
         (**self).hash(hasher)
     }
 }
 
-impl<'a, A: Alloc> Add<&'a str> for IString<A> {
+impl<'a, A: AllocRef> Add<&'a str> for IString<A> {
     type Output = IString<A>;
 
     #[inline(always)]
@@ -645,14 +650,14 @@ impl<'a, A: Alloc> Add<&'a str> for IString<A> {
         self
     }
 }
-impl<'a, A: Alloc> AddAssign<&'a str> for IString<A> {
+impl<'a, A: AllocRef> AddAssign<&'a str> for IString<A> {
     #[inline]
     fn add_assign(&mut self, other: &str) {
         self.push_str(other);
     }
 }
 
-impl<A: Alloc> ops::Index<ops::Range<usize>> for IString<A> {
+impl<A: AllocRef> ops::Index<ops::Range<usize>> for IString<A> {
     type Output = str;
 
     #[inline]
@@ -660,7 +665,7 @@ impl<A: Alloc> ops::Index<ops::Range<usize>> for IString<A> {
         &self[..][index]
     }
 }
-impl<A: Alloc> ops::Index<ops::RangeTo<usize>> for IString<A> {
+impl<A: AllocRef> ops::Index<ops::RangeTo<usize>> for IString<A> {
     type Output = str;
 
     #[inline]
@@ -668,7 +673,7 @@ impl<A: Alloc> ops::Index<ops::RangeTo<usize>> for IString<A> {
         &self[..][index]
     }
 }
-impl<A: Alloc> ops::Index<ops::RangeFrom<usize>> for IString<A> {
+impl<A: AllocRef> ops::Index<ops::RangeFrom<usize>> for IString<A> {
     type Output = str;
 
     #[inline]
@@ -676,7 +681,7 @@ impl<A: Alloc> ops::Index<ops::RangeFrom<usize>> for IString<A> {
         &self[..][index]
     }
 }
-impl<A: Alloc> ops::Index<ops::RangeFull> for IString<A> {
+impl<A: AllocRef> ops::Index<ops::RangeFull> for IString<A> {
     type Output = str;
 
     #[inline]
@@ -684,7 +689,7 @@ impl<A: Alloc> ops::Index<ops::RangeFull> for IString<A> {
         self.as_str()
     }
 }
-impl<A: Alloc> ops::Index<ops::RangeInclusive<usize>> for IString<A> {
+impl<A: AllocRef> ops::Index<ops::RangeInclusive<usize>> for IString<A> {
     type Output = str;
 
     #[inline]
@@ -692,7 +697,7 @@ impl<A: Alloc> ops::Index<ops::RangeInclusive<usize>> for IString<A> {
         Index::index(&**self, index)
     }
 }
-impl<A: Alloc> ops::Index<ops::RangeToInclusive<usize>> for IString<A> {
+impl<A: AllocRef> ops::Index<ops::RangeToInclusive<usize>> for IString<A> {
     type Output = str;
 
     #[inline]
@@ -701,7 +706,7 @@ impl<A: Alloc> ops::Index<ops::RangeToInclusive<usize>> for IString<A> {
     }
 }
 
-impl<A: Alloc> Borrow<str> for IString<A> {
+impl<A: AllocRef> Borrow<str> for IString<A> {
     fn borrow(&self) -> &str {
         self.as_str()
     }
