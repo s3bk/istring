@@ -39,7 +39,7 @@ use core::borrow::Borrow;
 use alloc::{string::String, vec::Vec};
 use alloc::borrow::Cow;
 use alloc::string::FromUtf8Error;
-use alloc::alloc::{AllocRef, Layout, Global, AllocInit, ReallocPlacement};
+use alloc::alloc::{AllocRef, Layout, Global};
 
 const IS_INLINE: u8 = 1 << 7;
 const LEN_MASK: u8 = !IS_INLINE;
@@ -139,14 +139,15 @@ impl<A: AllocRef> IString<A> {
         if capacity > INLINE_CAPACITY {
             IString{
                 union: unsafe {
-                    let block = alloc.alloc(Layout::from_size_align_unchecked(capacity, 1), AllocInit::Uninitialized)
-                        .expect("failed to allocate memory");
+                    let ptr = alloc.alloc(Layout::from_size_align_unchecked(capacity, 1))
+                        .expect("failed to allocate memory")
+                        .cast();
                     
                     IStringUnion {
                         heap: Heap {
-                            ptr: block.ptr.cast(),
+                            ptr,
                             len: 0,
-                            cap: block.size
+                            cap: capacity
                         }
                     }
                 },
@@ -230,16 +231,13 @@ impl<A: AllocRef> IString<A> {
             
             unsafe {
                 let len = self.len();
-                let block = self.alloc.alloc(
-                    Layout::from_size_align_unchecked(cap, 1),
-                    AllocInit::Uninitialized)
-                .unwrap();
-                let ptr = block.ptr.cast();
+                let ptr = self.alloc.alloc(Layout::from_size_align_unchecked(cap, 1))
+                .unwrap().cast();
                 copy_nonoverlapping(self.union.inline.data.as_ptr(), ptr.as_ptr(), len);
                 self.union.heap = Heap {
                     ptr,
                     len,
-                    cap: block.size
+                    cap
                 };
             }
         }
@@ -254,7 +252,7 @@ impl<A: AllocRef> IString<A> {
                 let heap = self.union.heap;
                 self.union.inline.len = len as u8 | IS_INLINE;
                 copy_nonoverlapping(heap.ptr.as_ptr(), self.union.inline.data.as_mut_ptr(), len);
-                Global.dealloc(heap.ptr, Layout::from_size_align_unchecked(heap.cap, 1));
+                self.alloc.dealloc(heap.ptr, Layout::from_size_align_unchecked(heap.cap, 1));
             }
         } else {
             self.resize(len);
@@ -288,15 +286,13 @@ impl<A: AllocRef> IString<A> {
         assert!(new_cap >= self.len());
         
         unsafe {
-            let block = self.alloc.grow(
+            let ptr = self.alloc.grow(
                 self.union.heap.ptr,
                 Layout::from_size_align_unchecked(self.union.heap.cap, 1),
-                new_cap,
-                ReallocPlacement::MayMove,
-                AllocInit::Uninitialized
-            ).expect("reallocation failed");
-            self.union.heap.ptr = block.ptr.cast();
-            self.union.heap.cap = block.size;
+                Layout::from_size_align_unchecked(new_cap, 1)
+            ).expect("reallocation failed").cast();
+            self.union.heap.ptr = ptr;
+            self.union.heap.cap = new_cap;
         }
     }
 
@@ -433,12 +429,12 @@ impl<A: AllocRef> Drop for IString<A> {
     fn drop(&mut self) {
         if !self.is_inline() {
             unsafe {
-                Global.dealloc(self.union.heap.ptr, Layout::from_size_align_unchecked(self.union.heap.cap, 1));
+                self.alloc.dealloc(self.union.heap.ptr, Layout::from_size_align_unchecked(self.union.heap.cap, 1));
             }
         }
     }
 }
-impl IString {        
+impl IString {
     #[inline(always)]
     pub fn into_bytes(self) -> Vec<u8> {
         let s: String = self.into();
