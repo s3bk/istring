@@ -1,10 +1,10 @@
-use core::{fmt, slice, str, convert, mem, cmp, ptr, hash};
+use core::{fmt, slice, str, convert, mem, cmp, hash};
 use core::clone::Clone;
 use core::ops::{self, Index};
 use core::borrow::Borrow;
 use alloc::{string::String, vec::Vec};
-use alloc::string::FromUtf8Error;
 use alloc::boxed::Box;
+use crate::FromUtf8Error;
 
 const IS_INLINE: u8 = 1 << 7;
 const LEN_MASK: u8 = !IS_INLINE;
@@ -52,49 +52,64 @@ pub struct Heap {
     pub ptr:    *mut u8,
 }
 
-union SmallStringUnion {
+union SmallBytesUnion {
     inline: Inline,
     heap:   Heap
 }
+pub struct SmallBytes {
+    union: SmallBytesUnion,
+}
+unsafe impl Send for SmallBytes {}
+unsafe impl Sync for SmallBytes {}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SmallString {
-    union: SmallStringUnion,
+    bytes: SmallBytes,
 }
 
 #[test]
 fn test_layout() {
-    let s = SmallStringUnion { inline: Inline { data: [0; INLINE_CAPACITY], len: IS_INLINE } };
+    let s = SmallBytesUnion { inline: Inline { data: [0; INLINE_CAPACITY], len: IS_INLINE } };
     let heap = unsafe { s.heap };
     assert_eq!(heap.len, MAX_CAPACITY + 1);
 }
 
 #[inline(always)]
-fn box_str(s: &str) -> Box<str> {
+fn box_slice(s: &[u8]) -> Box<[u8]> {
     Box::from(s)
 }
 #[inline(always)]
-fn box_str_into_raw_parts(mut s: Box<str>) -> (*mut u8, usize) {
+fn box_slice_into_raw_parts(mut s: Box<[u8]>) -> (*mut u8, usize) {
     let len = s.len();
     let ptr = s.as_mut_ptr();
     mem::forget(s);
     (ptr, len)
 }
 #[inline(always)]
-unsafe fn box_str_from_raw_parts(ptr: *mut u8, len: usize) -> Box<str> {
-    let ptr = slice::from_raw_parts_mut(ptr, len) as *mut [u8] as *mut str;
+unsafe fn box_slice_from_raw_parts(ptr: *mut u8, len: usize) -> Box<[u8]> {
+    let ptr = slice::from_raw_parts_mut(ptr, len) as *mut [u8];
     Box::from_raw(ptr)
 }
 
-unsafe impl Send for SmallString {}
-
-impl SmallString {
+impl SmallBytes {
     #[inline(always)]
-    pub fn new(s: &str) -> SmallString {
+    pub fn new() -> SmallBytes {
+        unsafe {
+            SmallBytes::from_inline(
+                Inline { data: [0; INLINE_CAPACITY], len: 0 },
+            )
+        }
+    }
+}
+impl<'a> From<&'a [u8]> for SmallBytes {
+    #[inline]
+    fn from(s: &[u8]) -> SmallBytes {
         let len = s.len();
         unsafe {
             if len > INLINE_CAPACITY {
-                let s = box_str(s);
-                let (ptr, len) = box_str_into_raw_parts(s);
-                SmallString::from_heap(
+                let s = box_slice(s);
+                let (ptr, len) = box_slice_into_raw_parts(s);
+                SmallBytes::from_heap(
                     Heap {
                         ptr,
                         len
@@ -102,20 +117,38 @@ impl SmallString {
                 )
             } else {
                 let mut data = [0; INLINE_CAPACITY];
-                data[.. len].copy_from_slice(s.as_bytes());
-                SmallString::from_inline(
+                data[.. len].copy_from_slice(s);
+                SmallBytes::from_inline(
                     Inline { data, len: len as u8 },
                 )
             }
         }
     }
 }
-impl Drop for SmallString {
+
+impl SmallString {
+    #[inline(always)]
+    pub fn new() -> SmallString {
+        SmallString {
+            bytes: SmallBytes::new()
+        }
+    }
+    pub fn from_utf8(bytes: SmallBytes) -> Result<SmallString, FromUtf8Error<SmallBytes>> {
+        match str::from_utf8(bytes.as_slice()) {
+            Ok(_) => Ok(SmallString { bytes }),
+            Err(error) => Err(FromUtf8Error {
+                bytes,
+                error
+            })
+        }
+    }
+}
+impl Drop for SmallBytes {
     #[inline]
     fn drop(&mut self) {
         if !self.is_inline() {
             unsafe {
-                box_str_from_raw_parts(self.union.heap.ptr, self.union.heap.len);
+                box_slice_from_raw_parts(self.union.heap.ptr, self.union.heap.len);
             }
         }
     }
@@ -123,62 +156,80 @@ impl Drop for SmallString {
 impl<'a> convert::From<&'a str> for SmallString {
     #[inline]
     fn from(s: &'a str) -> SmallString {
-        SmallString::new(s)
+        SmallString {
+            bytes: SmallBytes::from(s.as_bytes())
+        }
     }
 }
-impl convert::From<String> for SmallString {
+impl convert::From<Vec<u8>> for SmallBytes {
     #[inline]
-    fn from(mut s: String) -> SmallString {
+    fn from(s: Vec<u8>) -> SmallBytes {
         let len = s.len();
         if len <= INLINE_CAPACITY {
-            return SmallString::from(s.as_str());
+            return SmallBytes::from(s.as_slice());
         }
 
         unsafe {
-            let s = s.into_boxed_str();
-            let (ptr, len) = box_str_into_raw_parts(s);
+            let s = s.into_boxed_slice();
+            let (ptr, len) = box_slice_into_raw_parts(s);
             let heap = Heap {
                 ptr,
                 len,
             };
 
-            SmallString::from_heap(
+            SmallBytes::from_heap(
                 heap,
             )
         }
     }
 }
-impl Into<String> for SmallString {
-    fn into(self) -> String {
+impl convert::From<String> for SmallString {
+    #[inline]
+    fn from(s: String) -> SmallString {
+        SmallString {
+            bytes: SmallBytes::from(s.into_bytes())
+        }
+    }
+}
+impl Into<Vec<u8>> for SmallBytes {
+    #[inline]
+    fn into(self) -> Vec<u8> {
         let len = self.len();
         if self.is_inline() {
-            self.as_str().into()
+            self.as_slice().into()
         } else {
             unsafe {
-                let s = box_str_from_raw_parts(self.union.heap.ptr, len);
+                let s = box_slice_from_raw_parts(self.union.heap.ptr, len);
                 // the SmallString must not drop
                 mem::forget(self);
 
-                String::from(s)
+                Vec::from(s)
             }
         }
     }
 }
-impl Clone for SmallString {
+impl Into<String> for SmallString {
     #[inline]
-    fn clone(&self) -> SmallString {
+    fn into(self) -> String {
+        unsafe {
+            String::from_utf8_unchecked(self.bytes.into())
+        }
+    }
+}
+impl Clone for SmallBytes {
+    #[inline]
+    fn clone(&self) -> SmallBytes {
         unsafe {
             if self.is_inline() {
                 // simple case
-                SmallString {
-                    union: SmallStringUnion { inline: self.union.inline },
+                SmallBytes {
+                    union: SmallBytesUnion { inline: self.union.inline },
                 }
             } else {
                 let len = self.len();
                 let bytes = slice::from_raw_parts(self.union.heap.ptr, len);
-                let s = core::str::from_utf8_unchecked(bytes);
-                let (ptr, len) = box_str_into_raw_parts(box_str(s));
-                SmallString::from_heap(
+                let (ptr, len) = box_slice_into_raw_parts(box_slice(bytes));
+                SmallBytes::from_heap(
                     Heap {
                         ptr,
                         len
@@ -188,5 +239,37 @@ impl Clone for SmallString {
         }
     }
 }
+impl FromIterator<char> for SmallString {
+    fn from_iter<T: IntoIterator<Item=char>>(iter: T) -> Self {
+        let mut buf = [0; INLINE_CAPACITY];
+        let mut pos = 0;
+        let mut iter = iter.into_iter();
+        while let Some(c) = iter.next() {
+            if pos + c.len_utf8() > INLINE_CAPACITY {
+                let mut s = String::with_capacity(32);
+                s.push_str(unsafe { str::from_utf8_unchecked(&buf[..pos]) });
+                s.push(c);
+                s.extend(iter);
+                return s.into();
+            }
+            pos += c.encode_utf8(&mut buf[pos..]).len();
+        }
+        let bytes = unsafe { SmallBytes::from_inline(
+            Inline { data: buf, len: pos as u8 },
+        ) };
+        SmallString { bytes }
+    }
+}
+impl From<char> for SmallString {
+    fn from(c: char) -> SmallString {
+        let mut buf = [0; INLINE_CAPACITY];
+        let len = c.encode_utf8(&mut buf).len();
+        let bytes = unsafe { SmallBytes::from_inline(
+            Inline { data: buf, len: len as u8 },
+        ) };
+        SmallString { bytes }
+    }
+}
 
-define_common!(SmallString, SmallStringUnion);
+define_common_string!(SmallString, SmallStringUnion);
+define_common_bytes!(SmallBytes, SmallBytesUnion);

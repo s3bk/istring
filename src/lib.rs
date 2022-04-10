@@ -27,26 +27,69 @@ on 64bit machines: size_of::<IString>() == 24 bytes, inline capacity: 23 bytes
 
 extern crate alloc;
 
+#[cfg(feature="std")]
+extern crate std;
+
 #[macro_use]
 mod common;
 
 pub mod istring;
 pub mod small;
+pub mod ibytes;
 
 pub use crate::istring::{IString};
-pub use crate::small::SmallString;
+pub use crate::ibytes::IBytes;
+pub use crate::small::{SmallBytes, SmallString};
 
+#[derive(Debug)]
+pub struct FromUtf8Error<T> {
+    bytes: T,
+    error: core::str::Utf8Error,
+}
+impl<T: core::ops::Deref<Target=[u8]>> FromUtf8Error<T> {
+    pub fn as_bytes(&self) -> &[u8] {
+        &*self.bytes
+    }
+    pub fn into_bytes(self) -> T {
+        self.bytes
+    }
+    pub fn utf8_error(&self) -> core::str::Utf8Error {
+        self.error
+    }
+}
+#[cfg(feature="std")]
+impl<T: std::fmt::Debug> std::fmt::Display for FromUtf8Error<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        self.error.fmt(f)
+    }
+}
+#[cfg(feature="std")]
+impl<T: std::fmt::Debug> std::error::Error for FromUtf8Error<T> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.error.source()
+    }
+}
+
+#[cfg(feature="size")]
+impl datasize::DataSize for IBytes {
+    const IS_DYNAMIC: bool = true;
+    const STATIC_HEAP_SIZE: usize = core::mem::size_of::<IBytes>();
+
+    fn estimate_heap_size(&self) -> usize {
+        if self.is_inline() {
+            core::mem::size_of::<IBytes>()
+        } else {
+            core::mem::size_of::<IBytes>() + self.capacity()
+        }
+    }
+}
 #[cfg(feature="size")]
 impl datasize::DataSize for IString {
     const IS_DYNAMIC: bool = true;
     const STATIC_HEAP_SIZE: usize = core::mem::size_of::<IString>();
 
     fn estimate_heap_size(&self) -> usize {
-        if self.is_inline() {
-            core::mem::size_of::<IString>()
-        } else {
-            core::mem::size_of::<IString>() + self.capacity()
-        }
+        self.bytes.estimate_heap_size()
     }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "istring"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 authors = ["Sebastian Köln <s3bk@protonmail.com>"]
 description = "A replacement for String that allows storing short strings of length up to sizeof<String>() - 1 without a heap allocation"
@@ -13,6 +13,7 @@ keywords = ["string", "inline", "no_std"]
 [features]
 size = ["datasize"]
 serialize = ["serde"]
+std = []
 
 [dependencies.datasize]
 version = "0.2.10"

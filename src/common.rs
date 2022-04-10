@@ -1,4 +1,4 @@
-macro_rules! define_common {
+macro_rules! define_common_bytes {
     ($name:ident, $union:ident) => {
 impl $name {
     /// view as Inline.
@@ -40,7 +40,17 @@ impl $name {
         }
     }
     #[inline(always)]
-    pub fn as_bytes(&self) -> &[u8] {
+    pub fn as_mut_ptr(&mut self) -> *mut u8 {
+        unsafe {
+            if self.is_inline() {
+                &mut self.union.inline.data as *mut u8
+            } else {
+                self.union.heap.ptr
+            }
+        }
+    }
+    #[inline(always)]
+    pub fn as_slice(&self) -> &[u8] {
         let len = self.len();
         unsafe {
             if self.is_inline() {
@@ -52,54 +62,16 @@ impl $name {
     }
     
     #[inline(always)]
-    unsafe fn as_bytes_mut(&mut self) -> &mut [u8] {
-        let len = self.len();
-        if self.is_inline() {
-            &mut self.union.inline.data[.. len]
-        } else {
-            slice::from_raw_parts_mut(self.union.heap.ptr, len)
-        }
-    }
-    
-    #[inline(always)]
-    pub fn from_utf8(vec: Vec<u8>) -> Result<$name, FromUtf8Error> {
-        String::from_utf8(vec).map($name::from)
-    }
-    
-    #[inline(always)]
-    pub unsafe fn from_utf8_unchecked(bytes: Vec<u8>) -> String {
-        String::from_utf8_unchecked(bytes).into()
-    }
-    
-    #[inline(always)]
-    pub fn as_str(&self) -> &str {
+    pub fn as_mut_slice(&mut self) -> &mut [u8] {
         unsafe {
-            str::from_utf8_unchecked(self.as_bytes())
+            let len = self.len();
+            if self.is_inline() {
+                &mut self.union.inline.data[.. len]
+            } else {
+                slice::from_raw_parts_mut(self.union.heap.ptr, len)
+            }
         }
     }
-    
-    #[inline(always)]
-    pub fn as_mut_str(&mut self) -> &mut str {
-        unsafe {
-            str::from_utf8_unchecked_mut(self.as_bytes_mut())
-        }
-    }
-    
-    /// Deconstruct into the Heap part and the allocator
-    ///
-    /// Assumes it is heap-state, panics otherwhise. (you may want to call move_to_heap before this.)
-    /// The caller is responsible to adequatly dispose the owned memory. (for example by calling $name::from_heap)
-    #[inline(always)]
-    pub fn to_heap(self) -> Heap {
-        assert_eq!(self.is_inline(), false);
-        unsafe {
-            let heap = self.union.heap;
-            mem::forget(self);
-            
-            heap
-        }
-    }
-    
     /// Deconstruct into the Inline part and the allocator
     ///
     /// Assumes the string is inlined and panics otherwhise.
@@ -126,6 +98,166 @@ impl $name {
             union: $union { inline: inline },
         }
     }
+    /// Deconstruct into the Heap part and the allocator
+    ///
+    /// Assumes it is heap-state, panics otherwhise. (you may want to call move_to_heap before this.)
+    /// The caller is responsible to adequatly dispose the owned memory. (for example by calling $name::from_heap)
+    #[inline(always)]
+    pub fn to_heap(self) -> Heap {
+        assert_eq!(self.is_inline(), false);
+        unsafe {
+            let heap = self.union.heap;
+            mem::forget(self);
+            
+            heap
+        }
+    }
+}
+
+impl ops::Deref for $name {
+    type Target = [u8];
+    
+    #[inline(always)]
+    fn deref(&self) -> &[u8] {
+        self.as_slice()
+    }
+}
+impl ops::DerefMut for $name {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut [u8] {
+        self.as_mut_slice()
+    }
+}
+impl fmt::Debug for $name {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        <[u8] as fmt::Debug>::fmt(&*self, f)
+    }
+}
+impl PartialEq<[u8]> for $name {
+    #[inline(always)]
+    fn eq(&self, rhs: &[u8]) -> bool {
+        self.as_slice() == rhs
+    }
+}
+impl PartialEq<$name> for $name {
+    #[inline(always)]
+    fn eq(&self, rhs: &$name) -> bool {
+        self.as_slice() == rhs.as_slice()
+    }
+}
+impl Eq for $name {}
+impl cmp::PartialOrd for $name {
+    #[inline(always)]
+    fn partial_cmp(&self, rhs: &Self) -> Option<cmp::Ordering> {
+        self.as_slice().partial_cmp(rhs.as_slice())
+    }
+    #[inline(always)]
+    fn lt(&self, rhs: &Self) -> bool {
+        self.as_slice().lt(rhs.as_slice())
+    }
+    #[inline(always)]
+    fn le(&self, rhs: &Self) -> bool {
+        self.as_slice().le(rhs.as_slice())
+    }
+    #[inline(always)]
+    fn gt(&self, rhs: &Self) -> bool {
+        self.as_slice().gt(rhs.as_slice())
+    }
+    #[inline(always)]
+    fn ge(&self, rhs: &Self) -> bool {
+        self.as_slice().ge(rhs.as_slice())
+    }
+}
+impl cmp::Ord for $name {
+    #[inline(always)]
+    fn cmp(&self, other: &$name) -> cmp::Ordering {
+        self.as_slice().cmp(other.as_slice())
+    }
+}
+
+impl hash::Hash for $name {
+    #[inline(always)]
+    fn hash<H: hash::Hasher>(&self, hasher: &mut H) {
+        (**self).hash(hasher)
+    }
+}
+
+impl ops::Index<ops::Range<usize>> for $name {
+    type Output = [u8];
+
+    #[inline]
+    fn index(&self, index: ops::Range<usize>) -> &[u8] {
+        &self[..][index]
+    }
+}
+impl ops::Index<ops::RangeTo<usize>> for $name {
+    type Output = [u8];
+
+    #[inline]
+    fn index(&self, index: ops::RangeTo<usize>) -> &[u8] {
+        &self[..][index]
+    }
+}
+impl ops::Index<ops::RangeFrom<usize>> for $name {
+    type Output = [u8];
+
+    #[inline]
+    fn index(&self, index: ops::RangeFrom<usize>) -> &[u8] {
+        &self[..][index]
+    }
+}
+impl ops::Index<ops::RangeFull> for $name {
+    type Output = [u8];
+
+    #[inline]
+    fn index(&self, _index: ops::RangeFull) -> &[u8] {
+        self.as_slice()
+    }
+}
+impl ops::Index<ops::RangeInclusive<usize>> for $name {
+    type Output = [u8];
+
+    #[inline]
+    fn index(&self, index: ops::RangeInclusive<usize>) -> &[u8] {
+        Index::index(&**self, index)
+    }
+}
+impl ops::Index<ops::RangeToInclusive<usize>> for $name {
+    type Output = [u8];
+
+    #[inline]
+    fn index(&self, index: ops::RangeToInclusive<usize>) -> &[u8] {
+        Index::index(&**self, index)
+    }
+}
+
+impl Borrow<[u8]> for $name {
+    fn borrow(&self) -> &[u8] {
+        self.as_slice()
+    }
+}
+    }
+}
+
+macro_rules! define_common_string {
+    ($name:ident, $union:ident) => {
+impl $name {
+    #[inline(always)]
+    pub fn as_str(&self) -> &str {
+        unsafe {
+            str::from_utf8_unchecked(self.bytes.as_slice())
+        }
+    }
+    
+    #[inline(always)]
+    pub fn as_mut_str(&mut self) -> &mut str {
+        unsafe {
+            str::from_utf8_unchecked_mut(self.bytes.as_mut_slice())
+        }
+    }
+    
+    
 }
 impl $name {
     #[inline(always)]
@@ -135,6 +267,12 @@ impl $name {
     }
 }
 
+impl<'a> Into<String> for &'a $name {
+    #[inline(always)]
+    fn into(self) -> String {
+        String::from(self.as_str())
+    }
+}
 impl ops::Deref for $name {
     type Target = str;
     
@@ -174,49 +312,6 @@ impl PartialEq<String> for $name {
         self.as_str() == rhs
     }
 }
-impl PartialEq<$name> for $name {
-    #[inline(always)]
-    fn eq(&self, rhs: &$name) -> bool {
-        self.as_str() == rhs.as_str()
-    }
-}
-impl Eq for $name {}
-impl cmp::PartialOrd for $name {
-    #[inline(always)]
-    fn partial_cmp(&self, rhs: &Self) -> Option<cmp::Ordering> {
-        self.as_str().partial_cmp(rhs.as_str())
-    }
-    #[inline(always)]
-    fn lt(&self, rhs: &Self) -> bool {
-        self.as_str().lt(rhs.as_str())
-    }
-    #[inline(always)]
-    fn le(&self, rhs: &Self) -> bool {
-        self.as_str().le(rhs.as_str())
-    }
-    #[inline(always)]
-    fn gt(&self, rhs: &Self) -> bool {
-        self.as_str().gt(rhs.as_str())
-    }
-    #[inline(always)]
-    fn ge(&self, rhs: &Self) -> bool {
-        self.as_str().ge(rhs.as_str())
-    }
-}
-impl cmp::Ord for $name {
-    #[inline(always)]
-    fn cmp(&self, other: &$name) -> cmp::Ordering {
-        self.as_str().cmp(other.as_str())
-    }
-}
-
-impl hash::Hash for $name {
-    #[inline(always)]
-    fn hash<H: hash::Hasher>(&self, hasher: &mut H) {
-        (**self).hash(hasher)
-    }
-}
-
 impl ops::Index<ops::Range<usize>> for $name {
     type Output = str;
 
