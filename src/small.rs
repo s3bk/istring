@@ -62,7 +62,7 @@ pub struct SmallBytes {
 unsafe impl Send for SmallBytes {}
 unsafe impl Sync for SmallBytes {}
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone)]
 pub struct SmallString {
     bytes: SmallBytes,
 }

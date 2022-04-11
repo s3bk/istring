@@ -9,7 +9,7 @@ use alloc::borrow::Cow;
 use crate::ibytes::IBytes;
 use crate::FromUtf8Error;
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone)]
 pub struct IString {
     pub (crate) bytes: IBytes,
 }

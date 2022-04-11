@@ -113,7 +113,6 @@ impl $name {
         }
     }
 }
-
 impl ops::Deref for $name {
     type Target = [u8];
     
@@ -140,13 +139,17 @@ impl PartialEq<[u8]> for $name {
         self.as_slice() == rhs
     }
 }
-impl PartialEq<$name> for $name {
-    #[inline(always)]
-    fn eq(&self, rhs: &$name) -> bool {
-        self.as_slice() == rhs.as_slice()
+impl PartialEq for $name {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.as_slice().eq(rhs.as_slice())
     }
 }
 impl Eq for $name {}
+impl core::hash::Hash for $name {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.as_slice().hash(state);
+    }
+}
 impl cmp::PartialOrd for $name {
     #[inline(always)]
     fn partial_cmp(&self, rhs: &Self) -> Option<cmp::Ordering> {
@@ -175,14 +178,6 @@ impl cmp::Ord for $name {
         self.as_slice().cmp(other.as_slice())
     }
 }
-
-impl hash::Hash for $name {
-    #[inline(always)]
-    fn hash<H: hash::Hasher>(&self, hasher: &mut H) {
-        (**self).hash(hasher)
-    }
-}
-
 impl ops::Index<ops::Range<usize>> for $name {
     type Output = [u8];
 
@@ -310,6 +305,45 @@ impl PartialEq<String> for $name {
     #[inline(always)]
     fn eq(&self, rhs: &String) -> bool {
         self.as_str() == rhs
+    }
+}
+impl PartialEq for $name {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.as_str().eq(rhs.as_str())
+    }
+}
+impl Eq for $name {}
+impl core::hash::Hash for $name {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.as_str().hash(state);
+    }
+}
+impl core::cmp::PartialOrd for $name {
+    #[inline(always)]
+    fn partial_cmp(&self, rhs: &Self) -> Option<core::cmp::Ordering> {
+        self.as_str().partial_cmp(rhs.as_str())
+    }
+    #[inline(always)]
+    fn lt(&self, rhs: &Self) -> bool {
+        self.as_str().lt(rhs.as_str())
+    }
+    #[inline(always)]
+    fn le(&self, rhs: &Self) -> bool {
+        self.as_str().le(rhs.as_str())
+    }
+    #[inline(always)]
+    fn gt(&self, rhs: &Self) -> bool {
+        self.as_str().gt(rhs.as_str())
+    }
+    #[inline(always)]
+    fn ge(&self, rhs: &Self) -> bool {
+        self.as_str().ge(rhs.as_str())
+    }
+}
+impl core::cmp::Ord for $name {
+    #[inline(always)]
+    fn cmp(&self, other: &$name) -> core::cmp::Ordering {
+        self.as_str().cmp(other.as_str())
     }
 }
 impl ops::Index<ops::Range<usize>> for $name {
