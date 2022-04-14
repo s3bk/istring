@@ -63,6 +63,7 @@ unsafe impl Send for SmallBytes {}
 unsafe impl Sync for SmallBytes {}
 
 #[derive(Clone)]
+#[cfg_attr(feature="size", derive(datasize::DataSize))]
 pub struct SmallString {
     bytes: SmallBytes,
 }
@@ -268,6 +269,21 @@ impl From<char> for SmallString {
             Inline { data: buf, len: len as u8 },
         ) };
         SmallString { bytes }
+    }
+}
+
+
+#[cfg(feature="size")]
+impl datasize::DataSize for SmallBytes {
+    const IS_DYNAMIC: bool = true;
+    const STATIC_HEAP_SIZE: usize = core::mem::size_of::<Self>();
+
+    fn estimate_heap_size(&self) -> usize {
+        if self.is_inline() {
+            0
+        } else {
+            self.len()
+        }
     }
 }
 

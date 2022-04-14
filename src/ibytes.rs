@@ -330,3 +330,17 @@ impl Clone for IBytes {
         }
     }
 }
+
+#[cfg(feature="size")]
+impl datasize::DataSize for IBytes {
+    const IS_DYNAMIC: bool = true;
+    const STATIC_HEAP_SIZE: usize = core::mem::size_of::<Self>();
+
+    fn estimate_heap_size(&self) -> usize {
+        if self.is_inline() {
+            0
+        } else {
+            self.capacity()
+        }
+    }
+}

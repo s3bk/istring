@@ -70,28 +70,6 @@ impl<T: std::fmt::Debug> std::error::Error for FromUtf8Error<T> {
     }
 }
 
-#[cfg(feature="size")]
-impl datasize::DataSize for IBytes {
-    const IS_DYNAMIC: bool = true;
-    const STATIC_HEAP_SIZE: usize = core::mem::size_of::<IBytes>();
-
-    fn estimate_heap_size(&self) -> usize {
-        if self.is_inline() {
-            core::mem::size_of::<IBytes>()
-        } else {
-            core::mem::size_of::<IBytes>() + self.capacity()
-        }
-    }
-}
-#[cfg(feature="size")]
-impl datasize::DataSize for IString {
-    const IS_DYNAMIC: bool = true;
-    const STATIC_HEAP_SIZE: usize = core::mem::size_of::<IString>();
-
-    fn estimate_heap_size(&self) -> usize {
-        self.bytes.estimate_heap_size()
-    }
-}
 
 #[cfg(feature="serialize")]
 use serde::{Serialize, Serializer, Deserialize, Deserializer};

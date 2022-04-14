@@ -10,6 +10,7 @@ use crate::ibytes::IBytes;
 use crate::FromUtf8Error;
 
 #[derive(Clone)]
+#[cfg_attr(feature="size", derive(datasize::DataSize))]
 pub struct IString {
     pub (crate) bytes: IBytes,
 }
