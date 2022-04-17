@@ -280,9 +280,9 @@ impl datasize::DataSize for SmallBytes {
 
     fn estimate_heap_size(&self) -> usize {
         if self.is_inline() {
-            0
+            Self::STATIC_HEAP_SIZE
         } else {
-            self.len()
+            Self::STATIC_HEAP_SIZE + self.len()
         }
     }
 }
