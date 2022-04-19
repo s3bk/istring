@@ -16,6 +16,7 @@ serialize = ["serde"]
 std = []
 
 [dependencies.datasize]
+git = "https://github.com/s3bk/datasize-rs"
 version = "0.2.10"
 optional = true
 
