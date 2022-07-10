@@ -92,3 +92,20 @@ impl<'de> Deserialize<'de> for IString {
         Ok(s)
     }
 }
+
+#[cfg(feature="serialize")]
+impl Serialize for SmallString {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    {
+        self.as_str().serialize(serializer)
+    }
+}
+
+#[cfg(feature="serialize")]
+impl<'de> Deserialize<'de> for SmallString {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where D: Deserializer<'de> {
+        let s = alloc::string::String::deserialize(deserializer)?;
+        Ok(SmallString::from(s))
+    }
+}
