@@ -68,6 +68,58 @@ pub struct SmallString {
     bytes: SmallBytes,
 }
 
+#[cfg(feature="rkyv")]
+mod rkyv_impl {
+    use rkyv::{
+        string::{ArchivedString, StringResolver},
+        Archive, Deserialize, DeserializeUnsized, Fallible, Serialize, SerializeUnsized,
+    };
+    use super::SmallString;
+
+    impl Archive for SmallString {
+        type Archived = rkyv::string::ArchivedString;
+        type Resolver = rkyv::string::StringResolver;
+
+        #[inline]
+        unsafe fn resolve(&self, pos: usize, resolver: Self::Resolver, out: *mut Self::Archived) {
+            rkyv::string::ArchivedString::resolve_from_str(self.as_str(), pos, resolver, out);
+        }
+    }
+
+    #[cfg(feature="rkyv")]
+    impl<S: Fallible + ?Sized> Serialize<S> for SmallString
+    where
+        str: SerializeUnsized<S>,
+    {
+        #[inline]
+        fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+            ArchivedString::serialize_from_str(self.as_str(), serializer)
+        }
+    }
+    impl<D: Fallible + ?Sized> Deserialize<SmallString, D> for ArchivedString
+    where
+        str: DeserializeUnsized<str, D>,
+    {
+        #[inline]
+        fn deserialize(&self, _: &mut D) -> Result<SmallString, D::Error> {
+            Ok(self.as_str().into())
+        }
+    }
+    impl PartialEq<SmallString> for ArchivedString {
+        #[inline]
+        fn eq(&self, other: &SmallString) -> bool {
+            PartialEq::eq(self.as_str(), other.as_str())
+        }
+    }
+    
+    impl PartialEq<ArchivedString> for SmallString {
+        #[inline]
+        fn eq(&self, other: &ArchivedString) -> bool {
+            PartialEq::eq(other.as_str(), self.as_str())
+        }
+    }
+}
+
 #[test]
 fn test_layout() {
     let s = SmallBytesUnion { inline: Inline { data: [0; INLINE_CAPACITY], len: IS_INLINE } };
