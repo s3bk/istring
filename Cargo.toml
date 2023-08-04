@@ -14,6 +14,7 @@ keywords = ["string", "inline", "no_std"]
 size = ["datasize"]
 serialize = ["serde"]
 std = []
+rkyv = ["dep:rkyv"]
 
 [dependencies.datasize]
 version = "0.2.13"
