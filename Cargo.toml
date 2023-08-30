@@ -1,6 +1,6 @@
 [package]
 name = "istring"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2021"
 authors = ["Sebastian Köln <s3bk@protonmail.com>"]
 description = "A replacement for String that allows storing short strings of length up to sizeof<String>() - 1 without a heap allocation"
@@ -17,7 +17,7 @@ std = []
 rkyv = ["dep:rkyv"]
 
 [dependencies.datasize]
-version = "0.2.13"
+version = "0.2"
 optional = true
 
 [dependencies.serde]

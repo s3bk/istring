@@ -36,10 +36,12 @@ mod common;
 pub mod istring;
 pub mod small;
 pub mod ibytes;
+pub mod tiny;
 
-pub use crate::istring::{IString};
+pub use crate::istring::IString;
 pub use crate::ibytes::IBytes;
 pub use crate::small::{SmallBytes, SmallString};
+pub use crate::tiny::{TinyBytes, TinyString};
 
 #[derive(Debug)]
 pub struct FromUtf8Error<T> {
@@ -107,5 +109,14 @@ impl<'de> Deserialize<'de> for SmallString {
     where D: Deserializer<'de> {
         let s = alloc::string::String::deserialize(deserializer)?;
         Ok(SmallString::from(s))
+    }
+}
+
+
+#[cfg(feature="serialize")]
+impl Serialize for TinyString {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    {
+        self.as_str().serialize(serializer)
     }
 }
