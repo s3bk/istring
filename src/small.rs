@@ -72,8 +72,9 @@ pub struct SmallString {
 mod rkyv_impl {
     use rkyv::{
         string::{ArchivedString, StringResolver},
-        Archive, Deserialize, DeserializeUnsized, Fallible, Serialize, SerializeUnsized,
+        Archive, Deserialize, DeserializeUnsized, Serialize, SerializeUnsized, Place
     };
+    use rancor::{Fallible, Source};
     use super::SmallString;
 
     impl Archive for SmallString {
@@ -81,8 +82,8 @@ mod rkyv_impl {
         type Resolver = rkyv::string::StringResolver;
 
         #[inline]
-        unsafe fn resolve(&self, pos: usize, resolver: Self::Resolver, out: *mut Self::Archived) {
-            rkyv::string::ArchivedString::resolve_from_str(self.as_str(), pos, resolver, out);
+        fn resolve(&self, resolver: Self::Resolver, out: Place<Self::Archived>) {
+            rkyv::string::ArchivedString::resolve_from_str(self.as_str(), resolver, out);
         }
     }
 
@@ -90,6 +91,7 @@ mod rkyv_impl {
     impl<S: Fallible + ?Sized> Serialize<S> for SmallString
     where
         str: SerializeUnsized<S>,
+        S::Error: Source
     {
         #[inline]
         fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {

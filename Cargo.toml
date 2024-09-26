@@ -14,7 +14,7 @@ keywords = ["string", "inline", "no_std"]
 size = ["datasize"]
 serialize = ["serde"]
 std = []
-rkyv = ["dep:rkyv"]
+rkyv = ["dep:rkyv", "dep:rancor"]
 
 [dependencies.datasize]
 version = "0.2"
@@ -25,6 +25,11 @@ version = "1.0"
 optional = true
 
 [dependencies.rkyv]
-version = "0.7"
+version = "0.8"
 optional = true
 default-features = false
+
+[dependencies.rancor]
+version = "0.1"
+optional = true
+
