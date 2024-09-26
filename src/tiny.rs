@@ -1,4 +1,4 @@
-use core::{ops::Deref, fmt::Debug, hash::Hash};
+use core::{borrow::Borrow, fmt::Debug, hash::Hash, ops::Deref};
 
 #[derive(Copy, Clone)]
 pub struct TinyBytes {
@@ -148,7 +148,18 @@ impl Hash for TinyString {
         self.as_str().hash(state)
     }
 }
-
+impl Borrow<[u8]> for TinyBytes {
+    #[inline]
+    fn borrow(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+impl Borrow<str> for TinyString {
+    #[inline]
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
 impl From<char> for TinyString {
     #[inline]
     fn from(value: char) -> Self {
