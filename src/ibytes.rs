@@ -1,7 +1,10 @@
 use alloc::vec::Vec;
-use core::{ptr, mem, slice, convert, ops, hash, cmp, fmt};
+use core::{ptr, mem, slice, convert, ops, cmp, fmt};
 use core::ops::{Index};
 use core::borrow::Borrow;
+
+#[cfg(feature="ts")]
+use alloc::{borrow::ToOwned, string::String, format};
 
 const IS_INLINE: u8 = 1 << 7;
 const LEN_MASK: u8 = !IS_INLINE;
@@ -60,6 +63,8 @@ pub union IBytesUnion {
     inline: Inline,
     heap:   Heap
 }
+
+#[cfg_attr(feature="ts", derive(ts_rs::TS), ts(type="Vec<u8>"))]
 pub struct IBytes {
     union: IBytesUnion,
 }

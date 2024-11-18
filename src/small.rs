@@ -1,10 +1,13 @@
-use core::{fmt, slice, str, convert, mem, cmp, hash};
+use core::{fmt, slice, str, convert, mem, cmp};
 use core::clone::Clone;
 use core::ops::{self, Index};
 use core::borrow::Borrow;
 use alloc::{string::String, vec::Vec};
 use alloc::boxed::Box;
 use crate::FromUtf8Error;
+
+#[cfg(feature="ts")]
+use alloc::{borrow::ToOwned, format};
 
 const IS_INLINE: u8 = 1 << 7;
 const LEN_MASK: u8 = !IS_INLINE;
@@ -14,6 +17,7 @@ const INLINE_CAPACITY: usize = 15;
 #[cfg(target_pointer_width="32")]
 const INLINE_CAPACITY: usize = 7;
 
+#[allow(unused)]
 #[cfg(target_pointer_width="64")]
 const MAX_CAPACITY: usize = (1 << 63) - 1;
 #[cfg(target_pointer_width="32")]
@@ -56,6 +60,8 @@ union SmallBytesUnion {
     inline: Inline,
     heap:   Heap
 }
+
+#[cfg_attr(feature="ts", derive(ts_rs::TS), ts(type="Vec<u8>"))]
 pub struct SmallBytes {
     union: SmallBytesUnion,
 }
@@ -64,6 +70,8 @@ unsafe impl Sync for SmallBytes {}
 
 #[derive(Clone)]
 #[cfg_attr(feature="size", derive(datasize::DataSize))]
+#[cfg_attr(feature="ts", derive(ts_rs::TS), ts(type="String"))]
+
 pub struct SmallString {
     bytes: SmallBytes,
 }
@@ -71,7 +79,7 @@ pub struct SmallString {
 #[cfg(feature="rkyv")]
 mod rkyv_impl {
     use rkyv::{
-        string::{ArchivedString, StringResolver},
+        string::ArchivedString,
         Archive, Deserialize, DeserializeUnsized, Serialize, SerializeUnsized, Place
     };
     use rancor::{Fallible, Source};

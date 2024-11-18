@@ -38,6 +38,7 @@ pub mod small;
 pub mod ibytes;
 pub mod tiny;
 
+#[cfg(feature="serialize")]
 use core::marker::PhantomData;
 
 pub use crate::istring::IString;

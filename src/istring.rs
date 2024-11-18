@@ -1,4 +1,4 @@
-use core::{fmt, str, convert, str::Utf8Error};
+use core::{fmt, str, convert};
 use core::clone::Clone;
 use core::iter::{FromIterator, IntoIterator, Extend};
 use core::ops::{self, Index, Add, AddAssign};
@@ -6,11 +6,15 @@ use core::borrow::Borrow;
 use alloc::{string::String, vec::Vec};
 use alloc::borrow::Cow;
 
+#[cfg(feature="ts")]
+use alloc::{borrow::ToOwned, format};
+
 use crate::ibytes::IBytes;
 use crate::FromUtf8Error;
 
 #[derive(Clone)]
 #[cfg_attr(feature="size", derive(datasize::DataSize))]
+#[cfg_attr(feature="ts", derive(ts_rs::TS), ts(type="String"))]
 pub struct IString {
     pub (crate) bytes: IBytes,
 }

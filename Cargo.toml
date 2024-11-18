@@ -1,6 +1,6 @@
 [package]
 name = "istring"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 authors = ["Sebastian Köln <s3bk@protonmail.com>"]
 description = "A replacement for String that allows storing short strings of length up to sizeof<String>() - 1 without a heap allocation"
@@ -15,6 +15,7 @@ size = ["datasize"]
 serialize = ["serde"]
 std = []
 rkyv = ["dep:rkyv", "dep:rancor"]
+ts = ["dep:ts-rs", "std"]
 
 [dependencies.datasize]
 version = "0.2"
@@ -33,3 +34,6 @@ default-features = false
 version = "0.1"
 optional = true
 
+[dependencies.ts-rs]
+version = "10.0"
+optional = true
