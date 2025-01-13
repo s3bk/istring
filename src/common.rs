@@ -276,6 +276,21 @@ impl ops::Deref for $name {
         self.as_str()
     }
 }
+
+#[cfg(feature="std")]
+impl AsRef<str> for $name {
+    #[inline]
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+#[cfg(feature="std")]
+impl AsRef<[u8]> for $name {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
 impl fmt::Debug for $name {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
