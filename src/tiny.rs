@@ -1,7 +1,7 @@
 use core::{borrow::Borrow, fmt::Debug, hash::Hash, ops::Deref};
 
 #[cfg(feature="ts")]
-use alloc::{borrow::ToOwned, string::String, format};
+use alloc::{borrow::ToOwned, string::{String, ToString}, format};
 
 #[derive(Copy, Clone)]
 #[cfg_attr(feature="ts", derive(ts_rs::TS), ts(type="Vec<u8>"))]

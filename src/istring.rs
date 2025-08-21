@@ -7,7 +7,7 @@ use alloc::{string::String, vec::Vec};
 use alloc::borrow::Cow;
 
 #[cfg(feature="ts")]
-use alloc::{borrow::ToOwned, format};
+use alloc::{borrow::ToOwned, string::ToString, format};
 
 use crate::ibytes::IBytes;
 use crate::FromUtf8Error;

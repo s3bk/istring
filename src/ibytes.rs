@@ -4,7 +4,7 @@ use core::ops::{Index};
 use core::borrow::Borrow;
 
 #[cfg(feature="ts")]
-use alloc::{borrow::ToOwned, string::String, format};
+use alloc::{borrow::ToOwned, string::{String, ToString}, format};
 
 const IS_INLINE: u8 = 1 << 7;
 const LEN_MASK: u8 = !IS_INLINE;

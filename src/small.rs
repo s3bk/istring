@@ -7,7 +7,7 @@ use alloc::boxed::Box;
 use crate::FromUtf8Error;
 
 #[cfg(feature="ts")]
-use alloc::{borrow::ToOwned, format};
+use alloc::{borrow::ToOwned, string::ToString, format};
 
 const IS_INLINE: u8 = 1 << 7;
 const LEN_MASK: u8 = !IS_INLINE;
