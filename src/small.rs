@@ -61,7 +61,7 @@ union SmallBytesUnion {
     heap:   Heap
 }
 
-#[cfg_attr(feature="ts", derive(ts_rs::TS), ts(type="Vec<u8>"))]
+#[cfg_attr(feature="ts", derive(ts_rs::TS), ts(type="string"))]
 pub struct SmallBytes {
     union: SmallBytesUnion,
 }
@@ -70,7 +70,7 @@ unsafe impl Sync for SmallBytes {}
 
 #[derive(Clone)]
 #[cfg_attr(feature="size", derive(datasize::DataSize))]
-#[cfg_attr(feature="ts", derive(ts_rs::TS), ts(type="String"))]
+#[cfg_attr(feature="ts", derive(ts_rs::TS), ts(as="String"))]
 
 pub struct SmallString {
     bytes: SmallBytes,

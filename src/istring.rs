@@ -14,7 +14,7 @@ use crate::FromUtf8Error;
 
 #[derive(Clone)]
 #[cfg_attr(feature="size", derive(datasize::DataSize))]
-#[cfg_attr(feature="ts", derive(ts_rs::TS), ts(type="String"))]
+#[cfg_attr(feature="ts", derive(ts_rs::TS), ts(as="String"))]
 pub struct IString {
     pub (crate) bytes: IBytes,
 }

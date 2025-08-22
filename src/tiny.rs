@@ -4,14 +4,14 @@ use core::{borrow::Borrow, fmt::Debug, hash::Hash, ops::Deref};
 use alloc::{borrow::ToOwned, string::{String, ToString}, format};
 
 #[derive(Copy, Clone)]
-#[cfg_attr(feature="ts", derive(ts_rs::TS), ts(type="Vec<u8>"))]
+#[cfg_attr(feature="ts", derive(ts_rs::TS), ts(type="string"))]
 pub struct TinyBytes {
     len: u8,
     buf: [u8; 7]
 }
 
 #[derive(Copy, Clone)]
-#[cfg_attr(feature="ts", derive(ts_rs::TS), ts(type="String"))]
+#[cfg_attr(feature="ts", derive(ts_rs::TS), ts(as="String"))]
 pub struct TinyString(TinyBytes);
 
 impl TinyBytes {

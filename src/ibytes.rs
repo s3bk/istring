@@ -64,7 +64,7 @@ pub union IBytesUnion {
     heap:   Heap
 }
 
-#[cfg_attr(feature="ts", derive(ts_rs::TS), ts(type="Vec<u8>"))]
+#[cfg_attr(feature="ts", derive(ts_rs::TS), ts(type="string"))]
 pub struct IBytes {
     union: IBytesUnion,
 }
