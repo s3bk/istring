@@ -130,6 +130,77 @@ mod rkyv_impl {
     }
 }
 
+#[cfg(feature="bincode")]
+mod bincode_impl {
+    use bincode::{Encode, de::{Decode, Decoder, read::{Reader, BorrowReader}}, error::DecodeError};
+
+    use super::{SmallBytes, SmallString, INLINE_CAPACITY, Inline};
+    use alloc::vec;
+
+    impl<Context> Decode<Context> for SmallBytes {
+        // Required method
+        fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
+            let v = u64::decode(decoder)?;
+            let len: usize = v.try_into().map_err(|_| DecodeError::OutsideUsizeRange(v))?;
+            if len <= INLINE_CAPACITY {
+                let mut data = [0; INLINE_CAPACITY];
+                decoder.reader().read(&mut data[..len])?;
+                Ok(unsafe { SmallBytes::from_inline(
+                    Inline { data, len: len as u8 },
+                )})
+            } else {
+                let mut buf = vec![0; len];
+                decoder.reader().read(&mut buf)?;
+                Ok(buf.into())
+            }
+        }
+    }
+    impl<'de, Context> bincode::BorrowDecode<'de, Context> for SmallBytes {
+        fn borrow_decode<D: bincode::de::BorrowDecoder<'de, Context = Context>>(
+            decoder: &mut D,
+        ) -> core::result::Result<Self, bincode::error::DecodeError> {
+            let v = u64::decode(decoder)?;
+            let len: usize = v.try_into().map_err(|_| DecodeError::OutsideUsizeRange(v))?;
+            let bytes = decoder.borrow_reader().take_bytes(len)?;
+            Ok(bytes.into())
+        }
+    }
+
+    impl<Context> Decode<Context> for SmallString {
+        fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
+            let bytes = SmallBytes::decode(decoder)?;
+            match core::str::from_utf8(&*bytes) {
+                Ok(_) => Ok(SmallString { bytes }),
+                Err(e) => Err(DecodeError::Utf8 {
+                    inner: e,
+                })
+            }
+        }
+    }
+    impl<'de, Context> bincode::BorrowDecode<'de, Context> for SmallString {
+        fn borrow_decode<D: bincode::de::BorrowDecoder<'de, Context = Context>>(
+            decoder: &mut D,
+        ) -> core::result::Result<Self, bincode::error::DecodeError> {
+            let v = u64::decode(decoder)?;
+            let len: usize = v.try_into().map_err(|_| DecodeError::OutsideUsizeRange(v))?;
+            let bytes = decoder.borrow_reader().take_bytes(len)?;
+            let str = core::str::from_utf8(bytes).map_err(|e| DecodeError::Utf8 { inner: e })?;
+            Ok(str.into())
+        }
+    }
+
+    impl Encode for SmallBytes {
+        fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
+            self.as_slice().encode(encoder)
+        }
+    }
+    impl Encode for SmallString {
+        fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
+            self.bytes.encode(encoder)
+        }
+    }
+}
+
 #[test]
 fn test_layout() {
     let s = SmallBytesUnion { inline: Inline { data: [0; INLINE_CAPACITY], len: IS_INLINE } };
@@ -221,6 +292,27 @@ impl<'a> convert::From<&'a str> for SmallString {
     fn from(s: &'a str) -> SmallString {
         SmallString {
             bytes: SmallBytes::from(s.as_bytes())
+        }
+    }
+}
+impl convert::From<Box<[u8]>> for SmallBytes {
+    #[inline]
+    fn from(s: Box<[u8]>) -> SmallBytes {
+        let len = s.len();
+        if len <= INLINE_CAPACITY {
+            return SmallBytes::from(&*s);
+        }
+
+        unsafe {
+            let (ptr, len) = box_slice_into_raw_parts(s);
+            let heap = Heap {
+                ptr,
+                len,
+            };
+
+            SmallBytes::from_heap(
+                heap,
+            )
         }
     }
 }
