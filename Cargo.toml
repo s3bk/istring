@@ -18,6 +18,7 @@ std = []
 rkyv = ["dep:rkyv", "dep:rancor"]
 ts = ["dep:ts-rs", "std"]
 bincode = ["dep:bincode"]
+bincode-next = ["dep:bincode-next"]
 
 [dependencies.datasize]
 version = "0.2"
@@ -42,4 +43,8 @@ optional = true
 
 [dependencies.bincode]
 version = "2.0.1"
+optional = true
+
+[dependencies.bincode-next]
+version = "2.1.0"
 optional = true

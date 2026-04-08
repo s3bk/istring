@@ -13,17 +13,17 @@ const IS_INLINE: u8 = 1 << 7;
 const LEN_MASK: u8 = !IS_INLINE;
 
 #[cfg(target_pointer_width="64")]
-const INLINE_CAPACITY: usize = 15;
+pub const INLINE_CAPACITY: usize = 15;
 #[cfg(target_pointer_width="32")]
-const INLINE_CAPACITY: usize = 7;
+pub const INLINE_CAPACITY: usize = 7;
 
 #[allow(unused)]
 #[cfg(target_pointer_width="64")]
-const MAX_CAPACITY: usize = (1 << 63) - 1;
+pub const MAX_CAPACITY: usize = (1 << 63) - 1;
 #[cfg(target_pointer_width="32")]
-const MAX_CAPACITY: usize = (1 << 31) - 1;
+pub const MAX_CAPACITY: usize = (1 << 31) - 1;
 
-// use the MSG of heap.len to encode the variant
+// use the MSB of heap.len to encode the variant
 // which is also MSB of inline.len
 #[cfg(target_endian = "little")]
 #[derive(Copy, Clone)]
@@ -73,7 +73,7 @@ unsafe impl Sync for SmallBytes {}
 #[cfg_attr(feature="ts", derive(ts_rs::TS), ts(as="String"))]
 
 pub struct SmallString {
-    bytes: SmallBytes,
+    pub(crate) bytes: SmallBytes,
 }
 
 #[cfg(feature="rkyv")]
@@ -121,7 +121,7 @@ mod rkyv_impl {
             PartialEq::eq(self.as_str(), other.as_str())
         }
     }
-    
+
     impl PartialEq<ArchivedString> for SmallString {
         #[inline]
         fn eq(&self, other: &ArchivedString) -> bool {
@@ -130,76 +130,6 @@ mod rkyv_impl {
     }
 }
 
-#[cfg(feature="bincode")]
-mod bincode_impl {
-    use bincode::{Encode, de::{Decode, Decoder, read::{Reader, BorrowReader}}, error::DecodeError};
-
-    use super::{SmallBytes, SmallString, INLINE_CAPACITY, Inline};
-    use alloc::vec;
-
-    impl<Context> Decode<Context> for SmallBytes {
-        // Required method
-        fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
-            let v = u64::decode(decoder)?;
-            let len: usize = v.try_into().map_err(|_| DecodeError::OutsideUsizeRange(v))?;
-            if len <= INLINE_CAPACITY {
-                let mut data = [0; INLINE_CAPACITY];
-                decoder.reader().read(&mut data[..len])?;
-                Ok(unsafe { SmallBytes::from_inline(
-                    Inline { data, len: len as u8 },
-                )})
-            } else {
-                let mut buf = vec![0; len];
-                decoder.reader().read(&mut buf)?;
-                Ok(buf.into())
-            }
-        }
-    }
-    impl<'de, Context> bincode::BorrowDecode<'de, Context> for SmallBytes {
-        fn borrow_decode<D: bincode::de::BorrowDecoder<'de, Context = Context>>(
-            decoder: &mut D,
-        ) -> core::result::Result<Self, bincode::error::DecodeError> {
-            let v = u64::decode(decoder)?;
-            let len: usize = v.try_into().map_err(|_| DecodeError::OutsideUsizeRange(v))?;
-            let bytes = decoder.borrow_reader().take_bytes(len)?;
-            Ok(bytes.into())
-        }
-    }
-
-    impl<Context> Decode<Context> for SmallString {
-        fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
-            let bytes = SmallBytes::decode(decoder)?;
-            match core::str::from_utf8(&*bytes) {
-                Ok(_) => Ok(SmallString { bytes }),
-                Err(e) => Err(DecodeError::Utf8 {
-                    inner: e,
-                })
-            }
-        }
-    }
-    impl<'de, Context> bincode::BorrowDecode<'de, Context> for SmallString {
-        fn borrow_decode<D: bincode::de::BorrowDecoder<'de, Context = Context>>(
-            decoder: &mut D,
-        ) -> core::result::Result<Self, bincode::error::DecodeError> {
-            let v = u64::decode(decoder)?;
-            let len: usize = v.try_into().map_err(|_| DecodeError::OutsideUsizeRange(v))?;
-            let bytes = decoder.borrow_reader().take_bytes(len)?;
-            let str = core::str::from_utf8(bytes).map_err(|e| DecodeError::Utf8 { inner: e })?;
-            Ok(str.into())
-        }
-    }
-
-    impl Encode for SmallBytes {
-        fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
-            self.as_slice().encode(encoder)
-        }
-    }
-    impl Encode for SmallString {
-        fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
-            self.bytes.encode(encoder)
-        }
-    }
-}
 
 #[test]
 fn test_layout() {

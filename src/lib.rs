@@ -81,5 +81,5 @@ impl<T: std::fmt::Debug> std::error::Error for FromUtf8Error<T> {
 #[cfg(feature="serde")]
 mod impl_serde;
 
-#[cfg(feature="bincode")]
+#[cfg(any(feature="bincode", feature="bincode-next"))]
 mod impl_bincode;
